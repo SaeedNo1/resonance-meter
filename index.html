@@ -491,6 +491,10 @@ navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
   source.connect(highpass);
   highpass.connect(analyser);
 });
+      const source = audioCtx.createBufferSource();
+source.buffer = decoded;
+source.connect(highpass);
+highpass.connect(audioCtx.destination);
 
 // 绑定滑块控制
 const hpSlider = document.getElementById("hpFreq");
