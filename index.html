@@ -63,12 +63,14 @@
       <button id="startSweep" class="primary">开始扫频</button>
       <button id="stopSweep">停止</button>
       <button id="exportCSV">导出 CSV</button>
+      <button onclick="location.href='Frequency.html'">准备共振</button>
     </div>
 
     <div style="margin-top:10px">
       <span class="pill">检测峰值：<span id="peakFreq">—</span> Hz</span>
       <span class="pill">峰值幅度：<span id="peakAmp">—</span></span>
     </div>
+    
 
     <div class="hint">说明：此工具在手机上依赖扬声器把激励声播给被测体，被测体振动再由麦克风拾取。为避免直达声覆盖结构共振信号，请把麦克风尽量贴近被测体振动点并按合适位置放置扬声器（或使用耦合方式）。请注意听力安全，避免大音量长时间播放。</div>
   </div>
@@ -86,7 +88,6 @@
   </div>
   <canvas id="tapWave" width="600" height="120" style="margin-top:8px;border-radius:6px;background:#061225"></canvas>
 </div>
-   <button onclick="location.href='Frequency.html'">准备共振</button>
 <script>
 (async function(){
   const $ = id => document.getElementById(id);
