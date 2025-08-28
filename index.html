@@ -65,7 +65,6 @@
       <button id="exportCSV">导出 CSV</button>
       <button onclick="location.href='Frequency.html'">准备共振</button>
     </div>
-
     <div style="margin-top:10px">
       <span class="pill">检测峰值：<span id="peakFreq">—</span> Hz</span>
       <span class="pill">峰值幅度：<span id="peakAmp">—</span></span>
@@ -84,13 +83,14 @@
   <button id="tapDetectBtn">敲击检测（录音 2s）</button>
   <button id="downloadTap" style="display:none">下载录音 (WAV)</button>
   <div style="margin-top:8px;">
+    <span class="pill">敲击基频: <span id="tapFreq">—</span> Hz</span>
+  </div>
+  
+  <canvas id="tapWave" width="600" height="120" style="margin-top:8px;border-radius:6px;background:#061225"></canvas>
+  <div style="margin-top:8px;">
   <label for="hpFreq">高通滤波器频率: <span id="hpVal">50</span> Hz</label><br>
   <input type="range" id="hpFreq" min="10" max="1000" value="50" step="10">
 </div>
-  <div style="margin-top:8px;">
-    <span class="pill">敲击基频: <span id="tapFreq">—</span> Hz</span>
-  </div>
-  <canvas id="tapWave" width="600" height="120" style="margin-top:8px;border-radius:6px;background:#061225"></canvas>
 </div>
 <script>
 (async function(){
@@ -479,7 +479,6 @@
       // decode to AudioBuffer for high quality float samples
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 let highpass;
-
 navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
   const source = audioCtx.createMediaStreamSource(stream);
 
