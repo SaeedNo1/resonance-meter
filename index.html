@@ -77,7 +77,15 @@
     <canvas id="plot" width="800" height="320"></canvas>
   </div>
 </div>
-
+  <!-- ==== 敲击检测：添加到现有页面的脚本中 ==== -->
+<div style="padding:8px; margin-top:8px;">
+  <button id="tapDetectBtn">敲击检测（录音 2s）</button>
+  <button id="downloadTap" style="display:none">下载录音 (WAV)</button>
+  <div style="margin-top:8px;">
+    <span class="pill">敲击基频: <span id="tapFreq">—</span> Hz</span>
+  </div>
+  <canvas id="tapWave" width="600" height="120" style="margin-top:8px;border-radius:6px;background:#061225"></canvas>
+</div>
 <script>
 (async function(){
   const $ = id => document.getElementById(id);
@@ -332,6 +340,173 @@
     try { stopMic(); if (audioCtx) audioCtx.close(); } catch(e){}
   });
 
+})();
+(async function(){
+  const $ = id => document.getElementById(id);
+  const tapBtn = $('tapDetectBtn');
+  const dlBtn = $('downloadTap');
+  const tapFreqEl = $('tapFreq');
+  const waveCan = $('tapWave');
+  const wctx = waveCan.getContext('2d');
+
+  // 自相关基频估计（适合敲击/短瞬态的长记录）
+  function estimatePitchAutocorrLong(buf, sampleRate, minF=20, maxF=8000){
+    const N = buf.length;
+    // 去直流并窗
+    let mean = 0;
+    for (let i=0;i<N;i++) mean += buf[i];
+    mean /= N;
+    const xs = new Float32Array(N);
+    for (let i=0;i<N;i++){
+      xs[i] = buf[i] - mean;
+    }
+    // 可选汉宁窗
+    for (let i=0;i<N;i++){
+      const hann = 0.5*(1 - Math.cos(2*Math.PI*i/(N-1)));
+      xs[i] *= hann;
+    }
+
+    const minLag = Math.floor(sampleRate / Math.min(maxF, Math.max(minF, 1)));
+    const maxLag = Math.floor(sampleRate / Math.max(minF, 1));
+    let bestLag=-1, bestCorr=0;
+    // 使用下采样加速自相关搜索：先对 xs 做 2 倍下采样（可调整）
+    const step = 1; // 如果需要更快可改为 2 或 4，但会降低精度
+    for (let lag = minLag; lag <= maxLag; lag += step) {
+      let corr = 0;
+      for (let i=0;i+lag<N;i++){
+        corr += xs[i]*xs[i+lag];
+      }
+      if (corr > bestCorr){
+        bestCorr = corr;
+        bestLag = lag;
+      }
+    }
+    if (bestLag <= 0 || bestCorr <= 1e-8) return -1;
+    // 三点抛物线插值提升精度
+    const c = (lag) => {
+      let s=0;
+      for (let i=0;i+lag<N;i++) s += xs[i]*xs[i+lag];
+      return s;
+    };
+    const c1 = c(bestLag-1), c2 = c(bestLag), c3 = c(bestLag+1);
+    const denom = (c1 - 2*c2 + c3);
+    let shift = 0;
+    if (Math.abs(denom) > 1e-12) shift = 0.5*(c1 - c3)/denom;
+    const refinedLag = bestLag + shift;
+    const freq = sampleRate / refinedLag;
+    if (!isFinite(freq) || freq <= 0) return -1;
+    return freq;
+  }
+
+  // 将录到的 AudioBuffer 导出成 WAV Blob
+  function audioBufferToWavBlob(buffer){
+    const numOfChan = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const len = buffer.length * numOfChan * 2 + 44;
+    const buf = new ArrayBuffer(len);
+    const view = new DataView(buf);
+    // RIFF header
+    function writeString(view, offset, string){
+      for (let i=0;i<string.length;i++) view.setUint8(offset+i, string.charCodeAt(i));
+    }
+    writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + buffer.length * numOfChan * 2, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt '); view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, numOfChan, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numOfChan * 2, true);
+    view.setUint16(32, numOfChan * 2, true);
+    view.setUint16(34, 16, true);
+    writeString(view, 36, 'data'); view.setUint32(40, buffer.length * numOfChan * 2, true);
+    // write interleaved
+    let offset = 44;
+    const interleaved = new Int16Array(buffer.length * numOfChan);
+    for (let i=0;i<buffer.length;i++){
+      for (let ch=0; ch<numOfChan; ch++){
+        const sample = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+        interleaved[i*numOfChan + ch] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+      }
+    }
+    for (let i=0;i<interleaved.length;i++){
+      view.setInt16(offset, interleaved[i], true);
+      offset += 2;
+    }
+    return new Blob([view], { type:'audio/wav' });
+  }
+
+  // 画时域波形
+  function drawWave(buf, sr){
+    const N = buf.length;
+    wctx.clearRect(0,0,waveCan.width,waveCan.height);
+    wctx.fillStyle = '#061225';
+    wctx.fillRect(0,0,waveCan.width,waveCan.height);
+    wctx.lineWidth = 2; wctx.strokeStyle = '#5fc0ff';
+    wctx.beginPath();
+    const step = Math.ceil(N / waveCan.width);
+    const mid = waveCan.height/2;
+    for (let x=0, i=0; x<waveCan.width && i<N; x++, i += step){
+      const v = buf[i];
+      const y = mid + v * mid * 0.85;
+      if (x===0) wctx.moveTo(x,y); else wctx.lineTo(x,y);
+    }
+    wctx.stroke();
+  }
+
+  tapBtn.addEventListener('click', async ()=>{
+    tapBtn.disabled = true;
+    tapBtn.textContent = '录音中… 请敲击 2 秒';
+    tapFreqEl.textContent = '…';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount:1, sampleRate: 44100 }});
+      const mediaRec = new MediaRecorder(stream);
+      const chunks = [];
+      mediaRec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+      mediaRec.start();
+      await new Promise(r => setTimeout(r, 2000));
+      mediaRec.stop();
+      await new Promise(resolve => mediaRec.onstop = resolve);
+
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      const arrayBuffer = await blob.arrayBuffer();
+
+      // decode to AudioBuffer for high quality float samples
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+      // prefer first channel
+      const chData = decoded.getChannelData(0);
+      // 绘制时域
+      drawWave(chData, decoded.sampleRate);
+
+      // 运行自相关基频估计（长记录更准确）
+      const freq = estimatePitchAutocorrLong(chData, decoded.sampleRate, 20, 8000);
+      if (freq > 0) {
+        tapFreqEl.textContent = freq.toFixed(2);
+      } else {
+        tapFreqEl.textContent = '未检测到明显基频';
+      }
+
+      // 提供下载
+      const wavBlob = audioBufferToWavBlob(decoded);
+      const url = URL.createObjectURL(wavBlob);
+      dlBtn.href = url;
+      dlBtn.download = 'tap_record.wav';
+      dlBtn.style.display = 'inline-block';
+      dlBtn.onclick = ()=> { setTimeout(()=>URL.revokeObjectURL(url), 5000); };
+
+      // stop tracks
+      stream.getTracks().forEach(t=>t.stop());
+      audioCtx.close();
+
+    } catch (e) {
+      console.error(e);
+      alert('录音失败：' + e.message);
+      tapFreqEl.textContent = '错误';
+    } finally {
+      tapBtn.disabled = false;
+      tapBtn.textContent = '敲击检测（录音 2s）';
+    }
+  });
 })();
 </script>
 </body>
