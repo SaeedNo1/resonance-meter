@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Hz-Frequency</title>
+<style>
+  :root { --bg:#0f1220; --fg:#eaeef7; --muted:#9aa3b2; --card:#171a2b; --acc:#4da3ff; }
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+  background:linear-gradient(180deg,#0b0e19 0%,#141a2e 100%);color:var(--fg)}
+  .wrap{max-width:900px;margin:0 auto;padding:18px}
+  h1{font-size:22px;margin:8px 0 14px}
+  .grid{display:grid;grid-template-columns:1fr;gap:14px}
+  @media(min-width:760px){.grid{grid-template-columns:1fr 1fr}}
+  .card{background:var(--card);border:1px solid #232744;border-radius:14px;padding:14px}
+  label{display:block;font-size:12px;color:var(--muted);margin:6px 2px}
+  input,select,button{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2a2f4a;background:#0f1326;color:var(--fg);font-size:16px}
+  button{background:var(--acc);color:#051024;border:none;font-weight:700}
+  button.secondary{background:#27314f;color:var(--fg)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .small{font-size:12px;color:var(--muted)}
+  .readout{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+  .pill{background:#0e1430;border:1px solid #273058;border-radius:999px;padding:8px 10px;min-width:90px;text-align:center}
+  .big{font-size:22px;font-weight:800}
+  .meter{height:14px;border-radius:7px;background:#0b1026;border:1px solid #273058;overflow:hidden}
+  .bar{height:100%;width:0%}
+  .hint{margin-top:8px;color:#c9d7ff;font-size:12px}
+  .warning{color:#ffcf7f}
+  .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+  canvas{width:100%;height:120px;background:#0a0f22;border:1px solid #273058;border-radius:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>频率发生器 + 麦克风频率测量 + 分贝计</h1>
+
+  <div class="grid">
+    <!-- 发生器 -->
+    <div class="card">
+      <h2>声音发生器</h2>
+      <label>频率 (Hz) — 支持小数</label>
+      <div class="row">
+        <input id="freq" type="number" inputmode="decimal" step="0.1" min="1" value="440" />
+        <select id="wave">
+          <option value="sine">正弦波</option>
+          <option value="square">方波</option>
+          <option value="sawtooth">锯齿波</option>
+          <option value="triangle">三角波</option>
+        </select>
+      </div>
+
+      <label>音量</label>
+      <input id="gain" type="range" min="0" max="1" step="0.001" value="0.9" />
+
+      <div class="row" style="margin-top:12px">
+        <button id="startTone">开始</button>
+        <button id="stopTone" class="secondary">停止</button>
+      </div>
+
+      <div class="hint">
+        设备可播放的最大频率（约 Nyquist）：
+        <span id="nyq" class="mono"></span> Hz。
+        超过此值会被自动夹到上限；极低频（&lt;20 Hz）大多扬声器难以实际再现。
+      </div>
+    </div>
+
+    <!-- 麦克风与分贝计 -->
+    <div class="card">
+      <h2>麦克风频率测量 & 分贝计</h2>
+      <div class="row">
+        <button id="startMic">开始测量</button>
+        <button id="stopMic" class="secondary">停止测量</button>
+        <button onclick="location.href='index.html'">重新扫频</button>
+      </div>
+
+      <div class="readout">
+        <div class="pill"><div class="small">当前频率</div><div id="fCur" class="big">—</div></div>
+        <div class="pill"><div class="small">最低</div><div id="fMin" class="big">—</div></div>
+        <div class="pill"><div class="small">最高</div><div id="fMax" class="big">—</div></div>
+        <div class="pill"><div class="small">平均</div><div id="fAvg" class="big">—</div></div>
+      </div>
+
+      <label style="margin-top:12px">分贝计 (dBFS)</label>
+      <div class="meter"><div id="dbBar" class="bar"></div></div>
+      <div class="readout">
+        <div class="pill"><div class="small">瞬时</div><div id="dbNow" class="big">—</div></div>
+        <div class="pill"><div class="small">峰值保持</div><div id="dbPeak" class="big">—</div></div>
+      </div>
+
+      <label style="margin-top:12px">波形可视化</label>
+      <canvas id="scope" width="600" height="180"></canvas>
+
+      <div class="hint">
+        dBFS 为相对值（满刻度 0 dBFS），不是绝对 SPL。请在安全音量下使用，
+        <span class="warning">避免长时间高声压聆听</span>。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ----------- 通用状态 -----------
+  let audioCtx = null;
+  let osc = null;
+  let gainNode = null;
+
+  let nyquist = 22050; // 将在 AudioContext 创建后更新
+  const el = (id) => document.getElementById(id);
+
+  // 显示 Nyquist
+  function updateNyquist() {
+    if (!audioCtx) return;
+    nyquist = audioCtx.sampleRate / 2;
+    el('nyq').textContent = Math.floor(nyquist - 1);
+  }
+
+  // 确保频率在可播放范围内
+  function clampFreq(f) {
+    if (!audioCtx) return f;
+    const maxF = Math.max(1, nyquist - 1);
+    return Math.min(Math.max(f, 1), maxF);
+  }
+
+  // ----------- 发生器逻辑 -----------
+  async function ensureAudio() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+        latencyHint: 'interactive'
+      });
+      gainNode = audioCtx.createGain();
+      gainNode.gain.value = parseFloat(el('gain').value);
+      gainNode.connect(audioCtx.destination);
+      updateNyquist();
+    }
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+  }
+
+  async function startTone() {
+    await ensureAudio();
+    stopTone(); // 先停旧的
+    osc = audioCtx.createOscillator();
+    const wave = el('wave').value;
+    let freq = parseFloat(el('freq').value || '440');
+    freq = clampFreq(freq);
+
+    osc.type = wave;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    osc.connect(gainNode);
+    osc.start();
+  }
+
+  function stopTone() {
+    try {
+      if (osc) { osc.stop(); osc.disconnect(); }
+    } catch(e) {}
+    osc = null;
+  }
+
+  // 音量滑块
+  el('gain').addEventListener('input', (e) => {
+    if (!gainNode) return;
+    const v = parseFloat(e.target.value);
+    // 小做保护，避免突变爆音
+    const t = audioCtx ? audioCtx.currentTime : 0;
+    gainNode.gain.cancelScheduledValues(t);
+    gainNode.gain.linearRampToValueAtTime(v, t + 0.02);
+  });
+
+  el('startTone').addEventListener('click', startTone);
+  el('stopTone').addEventListener('click', stopTone);
+
+  // 当用户手动修改频率时，实时更新
+  el('freq').addEventListener('change', () => {
+    if (osc && audioCtx) {
+      let f = clampFreq(parseFloat(el('freq').value || '440'));
+      osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+      el('freq').value = f.toString();
+    }
+  });
+
+  el('wave').addEventListener('change', () => {
+    if (osc) osc.type = el('wave').value;
+  });
+
+  // ----------- 麦克风与频率估计 -----------
+  let micStream = null, micSource = null, analyser = null, scriptNode = null;
+  let rafId = null;
+  const scope = el('scope');
+  const ctx2d = scope.getContext('2d');
+
+  let freqStats = {count:0, sum:0, min:Infinity, max:-Infinity};
+  let peakDb = -Infinity;
+
+  function resetStats() {
+    freqStats = {count:0, sum:0, min:Infinity, max:-Infinity};
+    peakDb = -Infinity;
+    el('fCur').textContent = '—';
+    el('fMin').textContent = '—';
+    el('fMax').textContent = '—';
+    el('fAvg').textContent = '—';
+    el('dbNow').textContent = '—';
+    el('dbPeak').textContent = '—';
+    el('dbBar').style.width = '0%';
+  }
+
+  async function startMic() {
+    await ensureAudio();
+    resetStats();
+
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: 1,
+        sampleRate: audioCtx.sampleRate
+      }
+    });
+
+    micSource = audioCtx.createMediaStreamSource(micStream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048; // 平衡实时与分辨率
+    analyser.smoothingTimeConstant = 0.0;
+
+    micSource.connect(analyser);
+
+    // 使用时间域波形 → 自相关估计基频；同时计算 RMS 做 dBFS
+    const bufLen = analyser.fftSize;
+    const timeData = new Float32Array(bufLen);
+
+    const draw = () => {
+      analyser.getFloatTimeDomainData(timeData);
+
+      // dBFS
+      let sumSq = 0;
+      for (let i=0;i<bufLen;i++) { const v=timeData[i]; sumSq += v*v; }
+      const rms = Math.sqrt(sumSq / bufLen);
+      let db = 20*Math.log10(rms || 1e-12);
+      db = Math.max(-100, Math.min(0, db)); // 限幅显示
+      peakDb = Math.max(peakDb, db);
+      el('dbNow').textContent = db.toFixed(1)+' dBFS';
+      el('dbPeak').textContent = peakDb.toFixed(1)+' dBFS';
+      el('dbBar').style.width = ((db+100)/100*100).toFixed(1)+'%';
+
+      // 频率估计
+      const f0 = estimatePitchAutocorr(timeData, audioCtx.sampleRate);
+      if (f0 > 0) {
+        el('fCur').textContent = f0.toFixed(1)+' Hz';
+        // 更新统计
+        freqStats.count++;
+        freqStats.sum += f0;
+        freqStats.min = Math.min(freqStats.min, f0);
+        freqStats.max = Math.max(freqStats.max, f0);
+        el('fMin').textContent = freqStats.min.toFixed(1)+' Hz';
+        el('fMax').textContent = freqStats.max.toFixed(1)+' Hz';
+        el('fAvg').textContent = (freqStats.sum/freqStats.count).toFixed(1)+' Hz';
+      } else {
+        el('fCur').textContent = '—';
+      }
+
+      // 画示波器
+      drawScope(timeData);
+
+      rafId = requestAnimationFrame(draw);
+    };
+    draw();
+  }
+
+  function stopMic() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    try { micSource && micSource.disconnect(); } catch(e){}
+    try { analyser && analyser.disconnect(); } catch(e){}
+    if (micStream) {
+      micStream.getTracks().forEach(t => t.stop());
+    }
+    micStream = micSource = analyser = null;
+  }
+
+  function drawScope(data){
+    const W = scope.width, H = scope.height;
+    ctx2d.clearRect(0,0,W,H);
+    ctx2d.lineWidth = 2;
+    ctx2d.strokeStyle = '#65b7ff';
+    ctx2d.beginPath();
+    const mid = H/2;
+    for (let i=0;i<data.length;i++){
+      const x = i/data.length * W;
+      const y = mid + data[i]*mid*0.9;
+      if (i===0) ctx2d.moveTo(x,y); else ctx2d.lineTo(x,y);
+    }
+    ctx2d.stroke();
+    // 基线
+    ctx2d.strokeStyle = '#2b3d66';
+    ctx2d.lineWidth = 1;
+    ctx2d.beginPath();
+    ctx2d.moveTo(0, mid);
+    ctx2d.lineTo(W, mid);
+    ctx2d.stroke();
+  }
+
+  // 简洁的自相关基频估计（带峰値插值）
+  function estimatePitchAutocorr(buf, sampleRate){
+    const SIZE = buf.length;
+    // 预先去直流 + 简单窗口
+    let mean = 0;
+    for (let i=0;i<SIZE;i++) mean += buf[i];
+    mean /= SIZE;
+    const w = 0.5; // 汉宁窗权重
+    const xs = new Float32Array(SIZE);
+    for (let i=0;i<SIZE;i++){
+      const hann = (1 - Math.cos(2*Math.PI*i/(SIZE-1))) * 0.5;
+      xs[i] = (buf[i]-mean) * (w*hann + (1-w));
+    }
+
+    // 限制搜索的最小/最大周期（对应 50–2000 Hz，可自行调整）
+    const maxF = 2000, minF = 50;
+    const maxLag = Math.floor(sampleRate/minF);
+    const minLag = Math.floor(sampleRate/maxF);
+
+    let bestLag = -1, bestCorr = 0;
+
+    for (let lag=minLag; lag<=maxLag; lag++){
+      let corr = 0;
+      for (let i=0;i<SIZE-lag;i++){
+        corr += xs[i]*xs[i+lag];
+      }
+      if (corr > bestCorr){
+        bestCorr = corr;
+        bestLag = lag;
+      }
+    }
+
+    if (bestLag <= 0) return -1;
+
+    // 抛物线插值以精细化峰值
+    const l = bestLag;
+    const corrAt = (lag)=>{
+      let c=0;
+      for (let i=0;i<SIZE-lag;i++) c += xs[i]*xs[i+lag];
+      return c;
+    };
+    const c1 = corrAt(l-1), c2 = corrAt(l), c3 = corrAt(l+1);
+    const denom = (c1 - 2*c2 + c3);
+    let shift = 0;
+    if (Math.abs(denom) > 1e-12){
+      shift = 0.5*(c1 - c3)/denom;
+    }
+    const refinedLag = l + shift;
+    const freq = sampleRate / refinedLag;
+
+    // 质量门限：避免噪声时乱报
+    if (bestCorr < 0.001) return -1;
+    if (!isFinite(freq) || freq<=0) return -1;
+    return freq;
+  }
+
+  // 事件绑定
+  el('startMic').addEventListener('click', startMic);
+  el('stopMic').addEventListener('click', stopMic);
+
+  // 首次用户交互时更新 Nyquist
+  ['startTone','startMic'].forEach(id=>{
+    el(id).addEventListener('click', () => setTimeout(updateNyquist, 0));
+  });
+
+  // 离开页面时清理
+  window.addEventListener('pagehide', () => { stopTone(); stopMic(); });
+})();
+</script>
+</body>
+</html>
