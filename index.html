@@ -62,7 +62,6 @@
     <div class="controls">
       <button id="startSweep" class="primary">开始扫频</button>
       <button id="stopSweep">停止</button>
-      <button onclick="location.href='Frequency.html'">准备共振</button>
       <button id="exportCSV">导出 CSV</button>
     </div>
 
@@ -87,7 +86,7 @@
   </div>
   <canvas id="tapWave" width="600" height="120" style="margin-top:8px;border-radius:6px;background:#061225"></canvas>
 </div>
-
+   <button onclick="location.href='Frequency.html'">准备共振</button>
 <script>
 (async function(){
   const $ = id => document.getElementById(id);
