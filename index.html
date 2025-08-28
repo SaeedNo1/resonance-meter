@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>电子共振仪 </title>
+<title>电子共振仪 — 扫频测固有频率</title>
 <style>
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0f1724;color:#e6eef8;margin:0;padding:16px}
   .wrap{max-width:900px;margin:0 auto}
@@ -63,13 +63,13 @@
       <button id="startSweep" class="primary">开始扫频</button>
       <button id="stopSweep">停止</button>
       <button id="exportCSV">导出 CSV</button>
-      <button onclick="location.href='Frequency.html'">准备共振</button>
+      <button onclick="location.href='Hz-Frequency.html'">重新扫频</button>
     </div>
+
     <div style="margin-top:10px">
       <span class="pill">检测峰值：<span id="peakFreq">—</span> Hz</span>
       <span class="pill">峰值幅度：<span id="peakAmp">—</span></span>
     </div>
-    
 
     <div class="hint">说明：此工具在手机上依赖扬声器把激励声播给被测体，被测体振动再由麦克风拾取。为避免直达声覆盖结构共振信号，请把麦克风尽量贴近被测体振动点并按合适位置放置扬声器（或使用耦合方式）。请注意听力安全，避免大音量长时间播放。</div>
   </div>
@@ -78,8 +78,6 @@
     <canvas id="plot" width="800" height="320"></canvas>
   </div>
 </div>
-  <!-- ==== 敲击检测：添加到现有页面的脚本中 ==== -->
-<!-- ==== 敲击检测：添加到现有页面的脚本中 ==== -->
 <div style="padding:8px; margin-top:8px;">
   <button id="tapDetectBtn">敲击检测（录音 2s）</button>
   <button id="downloadTap" style="display:none">下载录音 (WAV)</button>
@@ -88,9 +86,262 @@
   </div>
   <canvas id="tapWave" width="600" height="120" style="margin-top:8px;border-radius:6px;background:#061225"></canvas>
 </div>
-
 <script>
 (async function(){
+  const $ = id => document.getElementById(id);
+
+  let audioCtx = null;
+  let micStream = null;
+  let micSrc = null;
+  let analyser = null;
+  let running = false;
+  let dataPoints = []; // {f, amp}
+  let osc = null;
+  let gainNode = null;
+  let nyquist = 22050;
+
+  const plot = $('plot');
+  const g = plot.getContext('2d');
+
+  function ensureAudio(){
+    if (!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)({latencyHint:'interactive'});
+      nyquist = audioCtx.sampleRate/2;
+    }
+    return audioCtx;
+  }
+
+  function clearPlot(){
+    g.fillStyle = '#061225';
+    g.fillRect(0,0,plot.width,plot.height);
+    // axes
+    g.strokeStyle = '#17334f';
+    g.lineWidth = 1;
+    // x baseline
+    g.beginPath(); g.moveTo(40, plot.height-30); g.lineTo(plot.width-10, plot.height-30); g.stroke();
+    // y baseline
+    g.beginPath(); g.moveTo(40,10); g.lineTo(40, plot.height-30); g.stroke();
+    // labels
+    g.fillStyle = '#7fb7e8'; g.font = '12px system-ui';
+    g.fillText('频率 (Hz)', plot.width/2-20, plot.height-6);
+    g.fillText('响应 (相对幅度)', 6, 18);
+  }
+
+  function drawCurve(points){
+    clearPlot();
+    if (!points || points.length===0) return;
+    // map frequency log scale for better visibility if wide range
+    const fmin = Math.min(...points.map(p=>p.f));
+    const fmax = Math.max(...points.map(p=>p.f));
+    const amin = Math.min(...points.map(p=>p.amp));
+    const amax = Math.max(...points.map(p=>p.amp));
+    const w = plot.width, h = plot.height;
+    const left = 40, right = w-10, top = 10, bottom = h-30;
+    // grid ticks
+    g.strokeStyle = '#10263a';
+    g.lineWidth = 1;
+    g.font = '11px system-ui';
+    g.fillStyle = '#9ecff7';
+    // draw x ticks (log spaced)
+    const tickFs = [fmin, fmax];
+    for (let t of [fmin, fmax]){
+      g.fillText(Math.round(t)+'Hz', t===fmin? left : right-40, bottom+18);
+    }
+    // path
+    g.lineWidth = 2;
+    g.strokeStyle = '#58b7ff';
+    g.beginPath();
+    for (let i=0;i<points.length;i++){
+      const p = points[i];
+      const fx = (Math.log(p.f) - Math.log(fmin)) / (Math.log(fmax) - Math.log(fmin || 1e-6));
+      const x = left + fx*(right-left);
+      const ay = (p.amp - amin) / (amax - amin || 1e-6);
+      const y = bottom - ay*(bottom-top);
+      if (i===0) g.moveTo(x,y); else g.lineTo(x,y);
+    }
+    g.stroke();
+    // mark peak
+    const peak = points.reduce((a,b)=> b.amp>a.amp?b:a, points[0]);
+    const pf = peak.f, pa = peak.amp;
+    const fx = (Math.log(pf) - Math.log(fmin)) / (Math.log(fmax) - Math.log(fmin || 1e-6));
+    const x = left + fx*(right-left);
+    const ay = (pa - amin) / (amax - amin || 1e-6);
+    const y = bottom - ay*(bottom-top);
+    g.fillStyle = '#ffcf6b';
+    g.beginPath(); g.arc(x,y,5,0,2*Math.PI); g.fill();
+    g.fillStyle = '#ffd'; g.font = '13px system-ui';
+    g.fillText('峰: '+pf.toFixed(2)+' Hz', x+8, y-8);
+  }
+
+  function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+  async function startMic(){
+    ensureAudio();
+    if (micStream) return;
+    micStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    micSrc = audioCtx.createMediaStreamSource(micStream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.0;
+    micSrc.connect(analyser);
+  }
+
+  function stopMic(){
+    if (micStream){
+      micStream.getTracks().forEach(t=>t.stop());
+      micStream = null;
+      micSrc && micSrc.disconnect();
+      analyser && analyser.disconnect();
+      analyser = null;
+    }
+  }
+
+  function getRMSFromTimeDomain(buf){
+    let sum=0;
+    for (let i=0;i<buf.length;i++){ const v=buf[i]; sum+=v*v; }
+    return Math.sqrt(sum/buf.length);
+  }
+
+  async function runSweep(){
+    if (running) return;
+    running = true;
+    dataPoints = [];
+    $('peakFreq').textContent = '—';
+    $('peakAmp').textContent = '—';
+    clearPlot();
+
+    const start = parseFloat($('fStart').value) || 1;
+    const end = parseFloat($('fEnd').value) || 1000;
+    let steps = parseInt($('steps').value) || 80;
+    const dur = Math.max(20, parseFloat($('dur').value) || 100); // ms per step
+    const wave = $('wave').value;
+    const gainVal = parseFloat($('gain').value) || 0.6;
+
+    // clamp to Nyquist/2
+    ensureAudio();
+    if (start <= 0) { alert('起始频率必须 > 0'); running=false; return; }
+    const maxPlayable = Math.max(1, audioCtx.sampleRate/2 - 1);
+    if (end > maxPlayable){
+      if (!confirm(`你设置的终止频率 (${end} Hz) 超过设备可播放上限约 ${Math.floor(maxPlayable)} Hz，是否继续并自动夹到上限？`)) {
+        running=false; return;
+      }
+    }
+    const fEndClamped = Math.min(end, maxPlayable);
+    // ensure steps not too large
+    if (steps > 800) steps = 800;
+
+    // prepare microphone (get permission)
+    try {
+      await startMic();
+    } catch(e){
+      alert('无法打开麦克风：'+e.message);
+      running=false; return;
+    }
+
+    // prepare playback oscillator + gain
+    if (!gainNode){
+      gainNode = audioCtx.createGain();
+      gainNode.gain.value = gainVal;
+      gainNode.connect(audioCtx.destination);
+    }
+    gainNode.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+
+    // We'll play discrete tones using oscillator, stopping/starting each step
+    const freqs = [];
+    for (let i=0;i<steps;i++){
+      const t = i/(steps-1);
+      // linear in frequency (you can change to logarithmic if desired)
+      const f = start * Math.pow(fEndClamped/start, t); // log spaced: better for resonance detection
+      freqs.push(f);
+    }
+
+    const timeDomain = new Float32Array(analyser.fftSize);
+
+    for (let i=0;i<freqs.length;i++){
+      if (!running) break;
+      const f = freqs[i];
+      // create oscillator for this step
+      const o = audioCtx.createOscillator();
+      o.type = wave;
+      o.frequency.setValueAtTime(f, audioCtx.currentTime);
+      o.connect(gainNode);
+      o.start();
+      // let it stabilize for half step, measure during remainder
+      const measureMs = Math.max(10, Math.floor(dur*0.8));
+      const warmMs = Math.max(0, Math.floor(dur - measureMs));
+      await sleep(warmMs);
+
+      // measure RMS across measureMs duration by sampling multiple frames
+      const sampleStart = performance.now();
+      let samples = [];
+      while (performance.now() - sampleStart < measureMs){
+        analyser.getFloatTimeDomainData(timeDomain);
+        const rms = getRMSFromTimeDomain(timeDomain);
+        samples.push(rms);
+        // small await to avoid blocking (frame aligned)
+        await sleep(8);
+      }
+      const meanRms = samples.reduce((a,b)=>a+b,0)/Math.max(1,samples.length);
+      // record
+      dataPoints.push({f, amp: meanRms});
+      // update plot incrementally
+      drawCurve(dataPoints);
+      // cleanup oscillator
+      try { o.stop(); o.disconnect(); } catch(e){}
+      // small gap between steps
+      await sleep( Math.max(2, Math.floor(dur*0.02)) );
+    }
+
+    // finished
+    running = false;
+    // compute peak
+    if (dataPoints.length>0){
+      const peak = dataPoints.reduce((a,b)=> b.amp>a.amp?b:a, dataPoints[0]);
+      $('peakFreq').textContent = peak.f.toFixed(3);
+      $('peakAmp').textContent = peak.amp.toExponential(2);
+      // optionally refine around peak: do narrow high-resolution sweep near peak (not implemented automatically)
+    }
+    stopMic();
+  }
+
+  // UI bindings
+  $('startSweep').addEventListener('click', async ()=>{
+    // user gesture: resume audio context
+    ensureAudio();
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    runSweep();
+  });
+
+  $('stopSweep').addEventListener('click', ()=>{
+    running = false;
+    // stop any playing oscillator immediately
+    try { if (osc) { osc.stop(); osc.disconnect(); osc=null; } } catch(e){}
+    // also try to set gain 0
+    try { if (gainNode) gainNode.gain.setValueAtTime(0, audioCtx.currentTime); } catch(e){}
+    stopMic();
+  });
+
+  $('exportCSV').addEventListener('click', ()=>{
+    if (!dataPoints || dataPoints.length===0){ alert('暂无数据，先执行一次扫频。'); return; }
+    let csv = 'freq_hz,amp_rms\n' + dataPoints.map(p => `${p.f.toFixed(6)},${p.amp}`).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'resonance_sweep.csv'; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  // initial plot
+  clearPlot();
+
+  // cleanup on page hide
+  window.addEventListener('pagehide', ()=>{
+    running=false;
+    try { stopMic(); if (audioCtx) audioCtx.close(); } catch(e){}
+  });
+
+})();
+  (async function(){
   const $ = id => document.getElementById(id);
   const tapBtn = $('tapDetectBtn');
   const dlBtn = $('downloadTap');
