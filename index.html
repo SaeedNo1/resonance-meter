@@ -85,12 +85,7 @@
   <div style="margin-top:8px;">
     <span class="pill">敲击基频: <span id="tapFreq">—</span> Hz</span>
   </div>
-  
   <canvas id="tapWave" width="600" height="120" style="margin-top:8px;border-radius:6px;background:#061225"></canvas>
-  <div style="margin-top:8px;">
-  <label for="hpFreq">高通滤波器频率: <span id="hpVal">50</span> Hz</label><br>
-  <input type="range" id="hpFreq" min="10" max="1000" value="50" step="10">
-</div>
 </div>
 <script>
 (async function(){
@@ -478,35 +473,7 @@
 
       // decode to AudioBuffer for high quality float samples
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-let highpass;
-navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-  const source = audioCtx.createMediaStreamSource(stream);
 
-  // 创建高通滤波器
-  highpass = audioCtx.createBiquadFilter();
-  highpass.type = "highpass";
-  highpass.frequency.value = 50;  // 默认 50 Hz
-
-  // 接到分析器
-  source.connect(highpass);
-  highpass.connect(analyser);
-});
-      const source = audioCtx.createBufferSource();
-source.buffer = decoded;
-source.connect(highpass);
-highpass.connect(audioCtx.destination);
-
-// 绑定滑块控制
-const hpSlider = document.getElementById("hpFreq");
-const hpVal = document.getElementById("hpVal");
-
-hpSlider.addEventListener("input", () => {
-  const freq = parseFloat(hpSlider.value);
-  if (highpass) {
-    highpass.frequency.value = freq;
-  }
-  hpVal.textContent = freq;
-});
       const decoded = await audioCtx.decodeAudioData(arrayBuffer);
       // prefer first channel
       const chData = decoded.getChannelData(0);
