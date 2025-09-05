@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>登录 - resonance-meter</title>
+</head>
+<body>
+  <h1>GitHub 登录</h1>
+  <button id="loginBtn">用 GitHub 登录</button>
+
+  <script>
+    const CLIENT_ID = ""; // 换成你自己的
+    const REDIRECT_URI = "https://saeedno1.github.io/resonance-meter/callback.html";
+
+    document.getElementById("loginBtn").addEventListener("click", () => {
+      const authUrl = `https://github.com/login/oauth/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=read:user`;
+      window.location.href = authUrl;
+    });
+  </script>
+</body>
+</html>
