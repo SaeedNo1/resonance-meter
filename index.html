@@ -89,10 +89,19 @@
   <canvas id="tapWave" width="600" height="120" style="margin-top:8px;border-radius:6px;background:#061225"></canvas>
 </div>
 <script>
+   document.addEventListener("DOMContentLoaded", () => {
+    const user = localStorage.getItem('rm_user');
+
+    if (!user) {
+      // 没有登录，跳转到 login.html
+      location.href = 'login.html';
+    } else {
+      // 已经登录，可以显示用户名
+      document.getElementById("welcome").textContent = "你好，" + JSON.parse(user).login;
+    }
+  });
 (async function(){
   const $ = id => document.getElementById(id);
-  const user = loccalStorage.getItem('rm_user');
-  if (!user) location.href='login.html';
   let audioCtx = null;
   let micStream = null;
   let micSrc = null;
