@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>登录回调 - resonance-meter</title>
+</head>
+<body>
+  <h1>正在登录...</h1>
+  <pre id="result"></pre>
+
+  <script>
+    const API_URL = "https://你的vercel项目名.vercel.app/api/gh-exchange"; // 换成你自己 Vercel 的域名
+
+    async function main() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      if (!code) {
+        document.getElementById("result").textContent = "没有拿到 code 参数";
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}?code=${code}`);
+        const data = await res.json();
+        document.getElementById("result").textContent = JSON.stringify(data, null, 2);
+
+        if (data.access_token) {
+          // ⚡ 拿到 token 后，你可以用它访问 GitHub API
+          const userRes = await fetch("https://api.github.com/user", {
+            headers: { Authorization: `token ${data.access_token}` }
+          });
+          const user = await userRes.json();
+          document.getElementById("result").textContent = "你好, " + user.login;
+        }
+      } catch (err) {
+        document.getElementById("result").textContent = "出错: " + err;
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>
