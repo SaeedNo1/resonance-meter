@@ -65,6 +65,7 @@
       <button id="stopSweep">停止</button>
       <button id="exportCSV">导出 CSV</button>
       <button onclick="location.href='Frequency.html'">准备共振</button>
+      <button id="baselineBtn">采集背景</button>
     </div>
 
     <div style="margin-top:10px">
@@ -81,6 +82,10 @@
 </div>
 <div style="padding:8px; margin-top:8px;">
   <button id="tapDetectBtn">敲击检测（录音 2s）</button>
+  <label style="margin-left:10px;">
+  <input type="checkbox" id="enableHPF"> 启用高通滤波
+</label>
+<input type="number" id="hpfValue" value="50" min="0" max="500" style="width:70px;"> Hz
   <button id="downloadTap" style="display:none">下载录音 (WAV)</button>
   <div style="margin-top:8px;">
     <span class="pill">敲击基频: <span id="tapFreq">—</span> Hz</span>
@@ -126,7 +131,9 @@
     g.fillText('频率 (Hz)', plot.width/2-20, plot.height-6);
     g.fillText('响应 (相对幅度)', 6, 18);
   }
-
+  if (baselineSpectrum) {
+  spectrum = spectrum.map((v, i) => Math.max(0, v - baselineSpectrum[i]));
+  }
   function drawCurve(points){
     clearPlot();
     if (!points || points.length===0) return;
@@ -339,7 +346,31 @@
     running=false;
     try { stopMic(); if (audioCtx) audioCtx.close(); } catch(e){}
   });
+document.getElementById("baselineBtn").onclick = async () => {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const src = audioCtx.createMediaStreamSource(stream);
+if (document.getElementById("enableHPF").checked) {
+  const highpass = audioCtx.createBiquadFilter();
+  highpass.type = "highpass";
+  highpass.frequency.value = parseFloat(document.getElementById("hpfValue").value) || 50;
+  src.connect(highpass);
+  src = highpass;
+}
+analyser = audioCtx.createAnalyser();
+src.connect(analyser);
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  src.connect(analyser);
 
+  const bufferLength = analyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+
+  setTimeout(() => {
+    analyser.getByteFrequencyData(dataArray);
+    baselineSpectrum = Array.from(dataArray);
+    alert("背景采集完成！");
+  }, 2000); // 采集2秒
+};
 })();
   (async function(){
   const $ = id => document.getElementById(id);
@@ -472,6 +503,7 @@
 
       // decode to AudioBuffer for high quality float samples
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      let baselineSpectrum = null;
       const decoded = await audioCtx.decodeAudioData(arrayBuffer);
       // prefer first channel
       const chData = decoded.getChannelData(0);
