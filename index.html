@@ -87,26 +87,7 @@
   </div>
   <canvas id="tapWave" width="600" height="120" style="margin-top:8px;border-radius:6px;background:#061225"></canvas>
 </div>
-  <!-- 退出按钮容器 -->
-<div style="position: fixed; top: 10px; right: 10px; z-index: 1000;">
-  <button 
-    onclick="localStorage.removeItem('rm_user');localStorage.removeItem('rm_token');location.href='login.html'" 
-    style="padding: 8px 16px; background-color: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
-    退出登录
-  </button>
-</div>
 <script>
-   document.addEventListener("DOMContentLoaded", () => {
-    const user = localStorage.getItem('rm_user');
-
-    if (!user) {
-      // 没有登录，跳转到 login.html
-      location.href = 'login.html';
-    } else {
-      // 已经登录，可以显示用户名
-      document.getElementById("welcome").textContent = "你好，" + JSON.parse(user).login;
-    }
-  });
 (async function(){
   const $ = id => document.getElementById(id);
   let audioCtx = null;
