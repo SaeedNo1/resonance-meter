@@ -131,8 +131,8 @@
     g.fillText('频率 (Hz)', plot.width/2-20, plot.height-6);
     g.fillText('响应 (相对幅度)', 6, 18);
   }
-  if (baselineSpectrum) {
-  spectrum = spectrum.map((v, i) => Math.max(0, v - baselineSpectrum[i]));
+  if (baselineSpectrum && spectrum && spectrum.length) {
+  spectrum = spectrum.map((v, i) => Math.max(0, v - (baselineSpectrum[i] || 0)));
   }
   function drawCurve(points){
     clearPlot();
