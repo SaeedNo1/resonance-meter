@@ -95,7 +95,6 @@
 <script>
 (async function(){
   const $ = id => document.getElementById(id);
-  let audioCtx = null;
   let micStream = null;
   let micSrc = null;
   let analyser = null;
@@ -104,10 +103,7 @@
   let osc = null;
   let gainNode = null;
   let nyquist = 22050;
-
-  const plot = $('plot');
   const g = plot.getContext('2d');
-
   function ensureAudio(){
     if (!audioCtx){
       audioCtx = new (window.AudioContext || window.webkitAudioContext)({latencyHint:'interactive'});
@@ -502,8 +498,6 @@ src.connect(analyser);
       const arrayBuffer = await blob.arrayBuffer();
 
       // decode to AudioBuffer for high quality float samples
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      let baselineSpectrum = null;
       const decoded = await audioCtx.decodeAudioData(arrayBuffer);
       // prefer first channel
       const chData = decoded.getChannelData(0);
