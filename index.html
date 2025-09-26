@@ -95,6 +95,7 @@
 <script>
 (async function(){
   const $ = id => document.getElementById(id);
+  let audioCtx = null;
   let micStream = null;
   let micSrc = null;
   let analyser = null;
