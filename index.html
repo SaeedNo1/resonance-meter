@@ -356,15 +356,15 @@ if (document.getElementById("enableHPF").checked) {
 }
 analyser = audioCtx.createAnalyser();
 src.connect(analyser);
-  const analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 2048;
-  src.connect(analyser);
+  const baselineAnalyser = audioCtx.createAnalyser();
+  baselineAnalyser.fftSize = 2048;
+  src.connect(baselineAnalyser);
 
-  const bufferLength = analyser.frequencyBinCount;
+  const bufferLength = baselineAnalyser.frequencyBinCount;
   const dataArray = new Uint8Array(bufferLength);
 
   setTimeout(() => {
-    analyser.getByteFrequencyData(dataArray);
+    baselineAnalyser.getByteFrequencyData(dataArray);
     baselineSpectrum = Array.from(dataArray);
     alert("背景采集完成！");
   }, 2000); // 采集2秒
