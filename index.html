@@ -66,6 +66,7 @@
       <button id="exportCSV">导出 CSV</button>
       <button onclick="location.href='Frequency.html'">准备共振</button>
       <button id="baselineBtn">采集背景</button>
+      <button id="essBtn">ESS 扫频测试</button>
     </div>
 
     <div style="margin-top:10px">
@@ -370,6 +371,68 @@ src.connect(analyser);
   }, 2000); // 采集2秒
 };
 })();
+  // =============== ESS（指数正弦扫）功能 ===============
+
+// 生成 ESS 波形
+function generateESS(f1, f2, duration, sampleRate) {
+  const N = Math.floor(duration * sampleRate);
+  const sweep = new Float32Array(N);
+
+  const L = Math.log(f2 / f1);
+  for (let n = 0; n < N; n++) {
+    const t = n / sampleRate;
+    const angle = 2 * Math.PI * f1 * (duration / L) * (Math.exp(t * L / duration) - 1);
+    sweep[n] = Math.sin(angle);
+  }
+  return sweep;
+}
+
+// 播放 ESS 并录音
+async function playAndRecordESS() {
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const sampleRate = audioCtx.sampleRate;
+
+  // 生成 20Hz–20kHz，持续 10 秒的 ESS
+  const ess = generateESS(20, 20000, 10, sampleRate);
+
+  // 准备 buffer 播放
+  const buffer = audioCtx.createBuffer(1, ess.length, sampleRate);
+  buffer.copyToChannel(ess, 0, 0);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buffer;
+
+  // 打开麦克风
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const mediaRecorder = new MediaRecorder(stream);
+
+  let chunks = [];
+  mediaRecorder.ondataavailable = e => chunks.push(e.data);
+
+  mediaRecorder.start();
+
+  // 播放
+  src.connect(audioCtx.destination);
+  src.start();
+
+  // 播放结束时停止录音
+  src.onended = () => {
+    mediaRecorder.stop();
+  };
+
+  mediaRecorder.onstop = async () => {
+    const blob = new Blob(chunks);
+    const arrayBuffer = await blob.arrayBuffer();
+    const recordedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    const recorded = recordedBuffer.getChannelData(0);
+
+    console.log("ESS 录音完成，长度:", recorded.length);
+    alert("ESS 录音完成！请在控制台查看数据。");
+    // TODO: 在这里调用 deconvolve(recorded, ess) 做去卷积
+  };
+}
+
+// =============== 按钮绑定 ===============
+document.getElementById("essBtn").onclick = playAndRecordESS;
   (async function(){
   const $ = id => document.getElementById(id);
   const tapBtn = $('tapDetectBtn');
