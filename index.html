@@ -93,6 +93,7 @@
   </div>
   <canvas id="tapWave" width="600" height="120" style="margin-top:8px;border-radius:6px;background:#061225"></canvas>
 </div>
+  <script src="https://unpkg.com/fft.js/dist/fft.min.js"></script>
 <script>
 (async function(){
   const $ = id => document.getElementById(id);
@@ -428,8 +429,69 @@ async function playAndRecordESS() {
     console.log("ESS 录音完成，长度:", recorded.length);
     alert("ESS 录音完成！请在控制台查看数据。");
     // TODO: 在这里调用 deconvolve(recorded, ess) 做去卷积
-  };
-}
+    const blob = new Blob(chunks);
+    const arrayBuffer = await blob.arrayBuffer();
+    const recordedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    const recorded = recordedBuffer.getChannelData(0);
+
+    console.log("ESS 录音完成，长度:", recorded.length);
+
+    // ====== 计算频率响应 FRF ======
+    const fftSize = 16384; // 2的幂，决定频率分辨率
+    const fft = new FFT(fftSize);
+
+    // FFT 输入 buffer
+    const input = new Array(fftSize).fill(0);
+    const output = fft.createComplexArray();
+
+    // 录音数据放进去（截断或零填充）
+    for (let i = 0; i < Math.min(recorded.length, fftSize); i++) {
+      input[i] = recorded[i];
+    }
+
+    // Y(f)
+    fft.realTransform(output, input);
+    fft.completeSpectrum(output);
+
+    // X(f) （理想 ESS）
+    const essInput = new Array(fftSize).fill(0);
+    for (let i = 0; i < Math.min(ess.length, fftSize); i++) {
+       essInput[i] = ess[i];
+    }
+    const essOut = fft.createComplexArray();
+    fft.realTransform(essOut, essInput);
+    fft.completeSpectrum(essOut);
+
+    // H(f) = Y/X
+    const frf = new Float32Array(fftSize/2);
+    for (let i = 0; i < fftSize/2; i++) {
+      const reY = output[2*i], imY = output[2*i+1];
+      const reX = essOut[2*i], imX = essOut[2*i+1];
+      const denom = reX*reX + imX*imX + 1e-12;
+      const reH = (reY*reX + imY*imX) / denom;
+      const imH = (imY*reX - reY*imX) / denom;
+      frf[i] = 20 * Math.log10(Math.sqrt(reH*reH + imH*imH)); // dB 幅度
+    }
+
+    // ====== 绘图 ======
+    const canvas = document.getElementById("plot");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.beginPath();
+    for (let i=0; i<frf.length; i++) {
+      const f = i * sampleRate / fftSize;
+      if (f > 20000) break; // 只画到 20kHz
+      const x = (f / 20000) * canvas.width;
+      const y = canvas.height - (frf[i] + 100) * (canvas.height/100); 
+      if (i===0) ctx.moveTo(x,y);
+      else ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = "blue";
+    ctx.stroke();
+
+    alert("频率响应绘制完成！");
+    };
+  }
 
 // =============== 按钮绑定 ===============
 document.getElementById("essBtn").onclick = playAndRecordESS;
