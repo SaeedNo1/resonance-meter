@@ -429,11 +429,6 @@ async function playAndRecordESS() {
     console.log("ESS 录音完成，长度:", recorded.length);
     alert("ESS 录音完成！请在控制台查看数据。");
     // TODO: 在这里调用 deconvolve(recorded, ess) 做去卷积
-    const blob = new Blob(chunks);
-    const arrayBuffer = await blob.arrayBuffer();
-    const recordedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-    const recorded = recordedBuffer.getChannelData(0);
-
     console.log("ESS 录音完成，长度:", recorded.length);
 
     // ====== 计算频率响应 FRF ======
