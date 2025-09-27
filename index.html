@@ -499,8 +499,8 @@ for (let i = 0; i < frf.length; i++) {
   if (f > 20000) break;
   csvContent += `${f},${frf[i]}\n`;
 }
-const blob = new Blob([csvContent], { type: "text/csv" });
-const url = URL.createObjectURL(blob);
+const csvblob = new Blob([csvContent], { type: "text/csv" });
+const url = URL.createObjectURL(csvblob);
 const a = document.createElement("a");
 a.href = url;
 a.download = "ess_result.csv";
