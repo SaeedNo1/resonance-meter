@@ -40,15 +40,18 @@
 
     <div class="row">
       <div>
-        <label>步数（steps）</label>
+        <label>步数（steps，不作用ESS）</label>
         <input id="steps" type="number" value="80" min="2" />
       </div>
       <div>
-        <label>每步时长 (ms)</label>
+        <label>每步时长 (ms，不作用ESS)</label>
         <input id="dur" type="number" value="120" min="20" />
       </div>
+      <div>
+        <label>时长 (秒)</label>
+        <input id="essDur" type="number" value="10" step="1" min="1" />
+      </div>
     </div>
-
     <label>波形</label>
     <select id="wave">
       <option value="sine">正弦</option>
@@ -394,7 +397,10 @@ async function playAndRecordESS() {
   const sampleRate = audioCtx.sampleRate;
 
   // 生成 20Hz–20kHz，持续 10 秒的 ESS
-  const ess = generateESS(20, 20000, 10, sampleRate);
+  const f1  = parseFloat(document.getElementById("fStart").value) || 20;
+  const f2  = parseFloat(document.getElementById("fEnd").value)   || 20000;
+  const dur = parseFloat(document.getElementById("essDur").value) || 10;
+  const ess = generateESS(f1, f2, dur, sampleRate);
 
   // 准备 buffer 播放
   const buffer = audioCtx.createBuffer(1, ess.length, sampleRate);
@@ -427,7 +433,7 @@ async function playAndRecordESS() {
     const recorded = recordedBuffer.getChannelData(0);
 
     console.log("ESS 录音完成，长度:", recorded.length);
-    alert("ESS 录音完成！请在控制台查看数据。");
+    alert("指数正弦扫录音完成！请在控制台查看数据。");
     // TODO: 在这里调用 deconvolve(recorded, ess) 做去卷积
     console.log("ESS 录音完成，长度:", recorded.length);
 
