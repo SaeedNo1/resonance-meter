@@ -480,16 +480,16 @@ async function playAndRecordESS() {
     document.getElementById("essPeak").innerText =
       `峰值: ${peakFreq.toFixed(1)} Hz, ${peakVal.toFixed(2)} dBFS`;
     let peakVal = -Infinity;
-let peakFreq = 0;
+    let peakFreq = 0;
 
-for (let i = 0; i < frf.length; i++) {
-  const f = i * sampleRate / fftSize;
-  if (f < f1 || f > f2) continue; // 限制在扫频范围内
-  if (frf[i] > peakVal) {
-    peakVal = frf[i];
-    peakFreq = f;
-  }
-}
+    for (let i = 0; i < frf.length; i++) {
+      const f = i * sampleRate / fftSize;
+      if (f < f1 || f > f2) continue; // 限制在扫频范围内
+      if (frf[i] > peakVal) {
+        peakVal = frf[i];
+        peakFreq = f;
+      }
+    }
     // ====== 绘图（自动归一化） ======
     const canvas = document.getElementById("plot");
     const ctx = canvas.getContext("2d");
