@@ -48,7 +48,7 @@
         <input id="dur" type="number" value="120" min="20" />
       </div>
       <div>
-        <label>时长 (秒)</label>
+        <label>时长 (s)</label>
         <input id="essDur" type="number" value="10" step="1" min="1" />
       </div>
     </div>
@@ -66,20 +66,19 @@
     <div class="controls">
       <button id="startSweep" class="primary">开始扫频</button>
       <button id="stopSweep">停止</button>
-      <button id="exportCSV">导出 CSV</button>
-      <button onclick="location.href='Frequency.html'">准备共振</button>
       <button id="baselineBtn">采集背景</button>
+      <button id="exportCSV">导出 CSV</button>
       <button id="essBtn">ESS 扫频测试</button>
+      <button onclick="location.href='Frequency.html'">准备共振</button>
     </div>
 
     <div style="margin-top:10px">
       <span class="pill">检测峰值：<span id="peakFreq">—</span> Hz</span>
       <span class="pill">峰值幅度：<span id="peakAmp">—</span></span>
     </div>
-
     <div class="hint">说明：此工具在手机上依赖扬声器把激励声播给被测体，被测体振动再由麦克风拾取。为避免直达声覆盖结构共振信号，请把麦克风尽量贴近被测体振动点并按合适位置放置扬声器（或使用耦合方式）。请注意听力安全，避免大音量长时间播放。</div>
   </div>
-
+  <div id="essPeak">峰值: —</div>
   <div class="card">
     <canvas id="plot" width="800" height="320"></canvas>
   </div>
@@ -473,20 +472,27 @@ async function playAndRecordESS() {
       const imH = (imY*reX - reY*imX) / denom;
       frf[i] = 20 * Math.log10(Math.sqrt(reH*reH + imH*imH)); // dB 幅度
     }
+    const peakVal = Math.max(...frf);
+    const peakIndex = frf.indexOf(peakVal);
+    const peakFreq = peakIndex * sampleRate / fftSize;
+    console.log(`峰值: ${peakFreq.toFixed(1)} Hz, ${peakVal.toFixed(2)} dBFS`);
+
+    document.getElementById("essPeak").innerText =
+      `峰值: ${peakFreq.toFixed(1)} Hz, ${peakVal.toFixed(2)} dBFS`;
     // ====== 绘图（自动归一化） ======
-  const canvas = document.getElementById("plot");
-  const ctx = canvas.getContext("2d");
+    const canvas = document.getElementById("plot");
+    const ctx = canvas.getContext("2d");
 
-  // 找最大/最小值
-  const minVal = Math.min(...frf);
-  const maxVal = Math.max(...frf);
+    // 找最大/最小值
+    const minVal = Math.min(...frf);
+    const maxVal = Math.max(...frf);
 
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.beginPath();
-  for (let i=0; i<frf.length; i++) {
-    const f = i * sampleRate / fftSize;
-    if (f > 20000) break; 
-    const x = (f / 20000) * canvas.width;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.beginPath();
+    for (let i=0; i<frf.length; i++) {
+      const f = i * sampleRate / fftSize;
+      if (f > 20000) break; 
+      const x = (f / 20000) * canvas.width;
 
     // 自动归一化到画布高度
     const norm = (frf[i] - minVal) / (maxVal - minVal + 1e-12);
