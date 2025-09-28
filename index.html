@@ -479,7 +479,6 @@ async function playAndRecordESS() {
 
     document.getElementById("essPeak").innerText =
       `峰值: ${peakFreq.toFixed(1)} Hz, ${peakVal.toFixed(2)} dBFS`;
-    let peakVal = -Infinity;
     let peakFreq = 0;
 
     for (let i = 0; i < frf.length; i++) {
