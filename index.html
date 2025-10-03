@@ -487,31 +487,39 @@ async function playAndRecordESS() {
     fft.realTransform(essOut, essInput);
     fft.completeSpectrum(essOut);
 
-    // H(f) = Y/X
-    const frf = new Float32Array(fftSize/2);
-    for (let i = 0; i < fftSize/2; i++) {
-      const reY = output[2*i], imY = output[2*i+1];
-      const reX = essOut[2*i], imX = essOut[2*i+1];
-      const denom = reX*reX + imX*imX + 1e-12;
-      const reH = (reY*reX + imY*imX) / denom;
-      const imH = (imY*reX - reY*imX) / denom;
-      frf[i] = 20 * Math.log10(Math.sqrt(reH*reH + imH*imH)); // dB 幅度
-    }
-    const peakVal = Math.max(...frf);
-    const peakIndex = frf.indexOf(peakVal);
-    const peakFreq = peakIndex * sampleRate / fftSize;
-    console.log(`峰值: ${peakFreq.toFixed(1)} Hz, ${peakVal.toFixed(2)} dBFS`);
-
-    document.getElementById("essPeak").innerText =
-      `峰值: ${peakFreq.toFixed(1)} Hz, ${peakVal.toFixed(2)} dBFS`;
-    for (let i = 0; i < frf.length; i++) {
-      const f = i * sampleRate / fftSize;
-      if (f < f1 || f > f2) continue; // 限制在扫频范围内
-      if (frf[i] > peakVal) {
-        peakVal = frf[i];
-        peakFreq = f;
+   // 录音结果 → 反卷积得到冲激响应
+function convolve(x, h) {
+  const y = new Float32Array(x.length + h.length - 1);
+  for (let n = 0; n < y.length; n++) {
+    let sum = 0;
+    for (let k = 0; k < h.length; k++) {
+      if (n - k >= 0 && n - k < x.length) {
+        sum += x[n - k] * h[k];
       }
     }
+    y[n] = sum;
+  }
+  return y;
+}
+
+// 在 onstop 回调里：
+const recorded = recordedBuffer.getChannelData(0);
+// 反卷积
+const ir = convolve(recorded, inv);
+
+// 对冲激响应做 FFT → 得到频率响应 frf
+const fft = new FFT(fftSize);
+const irIn = new Float32Array(fftSize);
+irIn.set(ir.slice(0, fftSize)); // 截断或补零
+const irOut = fft.createComplexArray();
+fft.realTransform(irOut, irIn);
+fft.completeSpectrum(irOut);
+
+let frf = new Float32Array(fftSize/2);
+for (let i=0; i<fftSize/2; i++) {
+  const re = irOut[2*i], im = irOut[2*i+1];
+  frf[i] = 20*Math.log10(Math.sqrt(re*re+im*im)+1e-12);
+}
     // ====== 绘图（自动归一化） ======
     const canvas = document.getElementById("plot");
     const ctx = canvas.getContext("2d");
