@@ -424,7 +424,7 @@ async function playAndRecordESS() {
  const f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
  const dur = parseFloat(document.getElementById("essDur").value) || 10;
 
- const { sweep, inv } = generateESSandInverse(f1, f2, dur, sampleRate);
+ const { sweep:ess, inv } = generateESSandInverse(f1, f2, dur, sampleRate);
 
   // 准备 buffer 播放
   const buffer = audioCtx.createBuffer(1, ess.length, sampleRate);
