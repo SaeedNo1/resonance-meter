@@ -508,7 +508,6 @@ function convolve(x, h) {
 const ir = convolve(recorded, inv);
 
 // 对冲激响应做 FFT → 得到频率响应 frf
-const fft = new FFT(fftSize);
 const irIn = new Float32Array(fftSize);
 irIn.set(ir.slice(0, fftSize)); // 截断或补零
 const irOut = fft.createComplexArray();
