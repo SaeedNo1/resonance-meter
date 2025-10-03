@@ -503,7 +503,7 @@ function convolve(x, h) {
 }
 
 // 在 onstop 回调里：
-const recorded = recordedBuffer.getChannelData(0);
+
 // 反卷积
 const ir = convolve(recorded, inv);
 
