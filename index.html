@@ -502,23 +502,36 @@ function convolve(x, h) {
   return y;
 }
 
-// 在 onstop 回调里：
+    // 用 FFT 做快速卷积（即反卷积）
+function fftConvolve(x, h, fft) {
+  const N = 1 << Math.ceil(Math.log2(x.length + h.length));
+  const X = fft.createComplexArray();
+  const H = fft.createComplexArray();
+  const Y = fft.createComplexArray();
 
-// 反卷积
-const ir = convolve(recorded, inv);
+  const xbuf = new Float32Array(N);
+  const hbuf = new Float32Array(N);
+  xbuf.set(x);
+  hbuf.set(h);
 
-// 对冲激响应做 FFT → 得到频率响应 frf
-const irIn = new Float32Array(fftSize);
-irIn.set(ir.slice(0, fftSize)); // 截断或补零
-const irOut = fft.createComplexArray();
-fft.realTransform(irOut, irIn);
-fft.completeSpectrum(irOut);
+  fft.realTransform(X, xbuf);
+  fft.completeSpectrum(X);
+  fft.realTransform(H, hbuf);
+  fft.completeSpectrum(H);
 
-let frf = new Float32Array(fftSize/2);
-for (let i=0; i<fftSize/2; i++) {
-  const re = irOut[2*i], im = irOut[2*i+1];
-  frf[i] = 20*Math.log10(Math.sqrt(re*re+im*im)+1e-12);
+  for (let i=0;i<X.length;i+=2){
+    const xr=X[i], xi=X[i+1], hr=H[i], hi=H[i+1];
+    Y[i]   = xr*hr - xi*hi;
+    Y[i+1] = xr*hi + xi*hr;
+  }
+
+  const out = new Float32Array(N);
+  fft.inverseTransform(out, Y);
+  return out;
 }
+
+// === 反卷积得到冲激响应 ===
+const ir = fftConvolve(recorded, inv, fft);
     // ====== 绘图（自动归一化） ======
     const canvas = document.getElementById("plot");
     const ctx = canvas.getContext("2d");
