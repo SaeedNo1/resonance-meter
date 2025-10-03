@@ -390,6 +390,29 @@ function generateESS(f1, f2, duration, sampleRate) {
   }
   return sweep;
 }
+  // 生成 ESS 及对应的 inverse filter
+function generateESSandInverse(f1, f2, duration, sampleRate) {
+  const N = Math.floor(duration * sampleRate);
+  const sweep = new Float32Array(N);
+  const L = Math.log(f2 / f1);
+
+  for (let n = 0; n < N; n++) {
+    const t = n / sampleRate;
+    const angle = 2 * Math.PI * f1 * (duration / L) * (Math.exp(t * L / duration) - 1);
+    sweep[n] = Math.sin(angle);
+  }
+
+  // inverse filter（用于反卷积）
+  const inv = new Float32Array(N);
+  for (let n = 0; n < N; n++) {
+    const t = (N - 1 - n) / sampleRate; // 反向时间
+    const angle = 2 * Math.PI * f1 * (duration / L) * (Math.exp(t * L / duration) - 1);
+    // 加上补偿 exp(-t*L/duration)
+    inv[n] = Math.sin(angle) * Math.exp(-t * L / duration);
+  }
+
+  return { sweep, inv };
+}
 
 // 播放 ESS 并录音
 async function playAndRecordESS() {
@@ -397,10 +420,11 @@ async function playAndRecordESS() {
   const sampleRate = audioCtx.sampleRate;
 
   // 生成 20Hz–20kHz，持续 10 秒的 ESS
-  const f1  = parseFloat(document.getElementById("fStart").value) || 20;
-  const f2  = parseFloat(document.getElementById("fEnd").value)   || 20000;
-  const dur = parseFloat(document.getElementById("essDur").value) || 10;
-  const ess = generateESS(f1, f2, dur, sampleRate);
+ const f1 = parseFloat(document.getElementById("fStart").value) || 20;
+ const f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
+ const dur = parseFloat(document.getElementById("essDur").value) || 10;
+
+ const { sweep, inv } = generateESSandInverse(f1, f2, dur, sampleRate);
 
   // 准备 buffer 播放
   const buffer = audioCtx.createBuffer(1, ess.length, sampleRate);
