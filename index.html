@@ -530,49 +530,64 @@ function fftConvolve(x, h, fft) {
   return out;
 }
 
-// === 反卷积得到冲激响应 ===
-const ir = fftConvolve(recorded, inv, fft);
-    // ====== 绘图（自动归一化） ======
-    const canvas = document.getElementById("plot");
-    const ctx = canvas.getContext("2d");
+// === 反卷积得到冲激响应（频域卷积 already done） ===
+const ir = fftConvolve(recorded, inv, fft); // 已得 ir（时间域）
 
-    // 找最大/最小值
-    const minVal = Math.min(...frf);
-    const maxVal = Math.max(...frf);
+// ====== 对 IR 做 FFT，得到频率响应 FRF ======
+const fftSizeIR = fftSize; // 16384 或你选择的尺寸
+const irBuf = new Float32Array(fftSizeIR);
+irBuf.set(ir.subarray(0, Math.min(ir.length, fftSizeIR))); // 截断或零填充
+const irOut = fft.createComplexArray();
+fft.realTransform(irOut, irBuf);
+fft.completeSpectrum(irOut);
 
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.beginPath();
-    for (let i=0; i<frf.length; i++) {
-      const f = i * sampleRate / fftSize;
-      if (f > 20000) break; 
-      const x = (f / 20000) * canvas.width;
+// 计算幅度（dB）
+const frf = new Float32Array(fftSizeIR/2);
+for (let i = 0; i < fftSizeIR/2; i++){
+  const re = irOut[2*i], im = irOut[2*i+1];
+  const mag = Math.sqrt(re*re + im*im);
+  frf[i] = 20 * Math.log10(mag + 1e-12); // dB
+}
 
-    // 自动归一化到画布高度
-    const norm = (frf[i] - minVal) / (maxVal - minVal + 1e-12);
-    const y = canvas.height - norm * canvas.height;
-
-    if (i===0) ctx.moveTo(x,y);
-    else ctx.lineTo(x,y);
-  }
-  ctx.strokeStyle = "blue";
-  ctx.stroke();
-
-  // ====== 导出 CSV ======
-  let csvContent = "Frequency(Hz),Magnitude(dB)\n";
-  for (let i = 0; i < frf.length; i++) {
-    const f = i * sampleRate / fftSize;
-    if (f > 20000) break;
-    csvContent += `${f},${frf[i]}\n`;
-  }
-  const csvblob = new Blob([csvContent], { type: "text/csv" });
-  const url = URL.createObjectURL(csvblob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "ess_result.csv";
-  a.click();
-  URL.revokeObjectURL(url);
+// ======（可选）在 frf 上做背景扣除（如果你有 baselineSpectrum）=====
+if (Array.isArray(baselineSpectrum) && baselineSpectrum.length >= frf.length) {
+  for (let i=0;i<frf.length;i++){
+    frf[i] = frf[i] - (baselineSpectrum[i] || 0); // 你也可以选择阈值/比值法
   }
 }
+
+// ====== 绘图（自动归一化） ======
+const canvas = document.getElementById("plot");
+const ctx = canvas.getContext("2d");
+const sampleRate = audioCtx.sampleRate; // 使用同一 audioCtx
+const minVal = Math.min(...frf);
+const maxVal = Math.max(...frf);
+
+ctx.clearRect(0,0,canvas.width,canvas.height);
+ctx.beginPath();
+for (let i = 0; i < frf.length; i++) {
+  const f = i * sampleRate / fftSizeIR;
+  if (f > 20000) break;
+  const x = (f / 20000) * canvas.width;
+  const norm = (frf[i] - minVal) / (maxVal - minVal + 1e-12);
+  const y = canvas.height - norm * canvas.height;
+  if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+}
+ctx.strokeStyle = "blue";
+ctx.stroke();
+
+// ====== 导出 CSV ======
+let csvContent = "Frequency(Hz),Magnitude(dB)\n";
+for (let i = 0; i < frf.length; i++) {
+  const f = i * sampleRate / fftSizeIR;
+  if (f > 20000) break;
+  csvContent += `${f},${frf[i]}\n`;
+}
+const csvBlob = new Blob([csvContent], { type: "text/csv" });
+const url = URL.createObjectURL(csvBlob);
+const a = document.createElement("a");
+a.href = url; a.download = "ess_result.csv"; a.click();
+URL.revokeObjectURL(url);
   // =============== 按钮绑定 ===============
   document.getElementById("essBtn").onclick = playAndRecordESS;
   //<==========敲击检测===============>
