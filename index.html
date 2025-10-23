@@ -575,7 +575,7 @@ for (let i = 0; i < frf.length; i++) {
 }
 ctx.strokeStyle = "blue";
 ctx.stroke();
-
+  };
 // ====== 导出 CSV ======
 let csvContent = "Frequency(Hz),Magnitude(dB)\n";
 for (let i = 0; i < frf.length; i++) {
@@ -591,6 +591,7 @@ URL.revokeObjectURL(url);
 };
   // =============== 按钮绑定 ===============
   document.getElementById("essBtn").onclick = playAndRecordESS;
+};
   //<==========敲击检测===============>
   (async function(){
   const $ = id => document.getElementById(id);
