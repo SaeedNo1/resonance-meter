@@ -588,9 +588,10 @@ const url = URL.createObjectURL(csvBlob);
 const a = document.createElement("a");
 a.href = url; a.download = "ess_result.csv"; a.click();
 URL.revokeObjectURL(url);
+};
   // =============== 按钮绑定 ===============
   document.getElementById("essBtn").onclick = playAndRecordESS;
-};
+
   //<==========敲击检测===============>
   (async function(){
   const $ = id => document.getElementById(id);
