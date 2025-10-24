@@ -526,7 +526,7 @@ function fftConvolve(x, h, fft) {
   }
 
   const out = new Float32Array(N);
-  fft.inverseTransform(out, Y);
+  fft.inverse(out, Y);
   return out;
 }
 
