@@ -543,7 +543,7 @@ fft.realTransform(irOut, irBuf);
 fft.completeSpectrum(irOut);
 
 // 计算幅度（dB）
-const frf = new Float32Array(fftSizeIR/2);
+frf = new Float32Array(fftSizeIR/2);
 for (let i = 0; i < fftSizeIR/2; i++){
   const re = irOut[2*i], im = irOut[2*i+1];
   const mag = Math.sqrt(re*re + im*im);
