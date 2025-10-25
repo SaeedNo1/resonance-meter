@@ -587,7 +587,8 @@ ctx.stroke();
 };
   // =============== 按钮绑定 ===============
   document.getElementById("essBtn").onclick = playAndRecordESS;
-async function(){
+  //===============敲击检测====================
+(async function(){
   const $ = id => document.getElementById(id);
   const tapBtn = $('tapDetectBtn');
   const dlBtn = $('downloadTap');
@@ -753,7 +754,6 @@ async function(){
     }
   });
 })();
-  //<==========敲击检测===============>
   document.getElementById("exportCSV").onclick = () => {
   const d = window._essData;
   if (!d || !d.frf || d.frf.length === 0) {
