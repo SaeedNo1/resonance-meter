@@ -452,6 +452,7 @@ async function playAndRecordESS() {
 
   mediaRecorder.onstop = async () => {
     let frf = [];
+    console.log("onstop started");
     const blob = new Blob(chunks);
     const arrayBuffer = await blob.arrayBuffer();
     const recordedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
