@@ -98,10 +98,10 @@
 </div>
   <script src="JS/fft.js"></script>
 <script>
+let audioCtx = null;
+let baselineSpectrum = null;
 (async function(){
   const $ = id => document.getElementById(id);
-  let audioCtx = null;
-  let baselineSpectrum = null;
   let micStream = null;
   let micSrc = null;
   let analyser = null;
@@ -451,6 +451,7 @@ async function playAndRecordESS() {
   };
 
   mediaRecorder.onstop = async () => {
+    let frf = [];
     const blob = new Blob(chunks);
     const arrayBuffer = await blob.arrayBuffer();
     const recordedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
