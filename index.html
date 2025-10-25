@@ -550,6 +550,9 @@ for (let i = 0; i < fftSizeIR/2; i++){
   const mag = Math.sqrt(re*re + im*im);
   frf[i] = 20 * Math.log10(mag + 1e-12); // dB
 }
+    // 计算 frf 完成后立即加：
+window._essData = { frf: frf, sampleRate: sampleRate, fftSizeIR: fftSizeIR };
+console.log('ESS done. frf length=', frf && frf.length, 'sampleRate=', sampleRate);
 
 // ======（可选）在 frf 上做背景扣除（如果你有 baselineSpectrum）=====
 if (Array.isArray(baselineSpectrum) && baselineSpectrum.length >= frf.length) {
@@ -578,18 +581,6 @@ for (let i = 0; i < frf.length; i++) {
 ctx.strokeStyle = "blue";
 ctx.stroke();
   };
-// ====== 导出 CSV ======
-let csvContent = "Frequency(Hz),Magnitude(dB)\n";
-for (let i = 0; i < frf.length; i++) {
-  const f = i * sampleRate / fftSizeIR;
-  if (f > 20000) break;
-  csvContent += `${f},${frf[i]}\n`;
-}
-const csvBlob = new Blob([csvContent], { type: "text/csv" });
-const url = URL.createObjectURL(csvBlob);
-const a = document.createElement("a");
-a.href = url; a.download = "ess_result.csv"; a.click();
-URL.revokeObjectURL(url);
 };
   // =============== 按钮绑定 ===============
   document.getElementById("essBtn").onclick = playAndRecordESS;
@@ -761,6 +752,25 @@ URL.revokeObjectURL(url);
     }
   });
 })();
+  document.getElementById("exportCSV").onclick = () => {
+  const d = window._essData;
+  if (!d || !d.frf || d.frf.length === 0) {
+    alert("还没有可导出的数据，请先运行 ESS。");
+    return;
+  }
+  let csv = "Frequency(Hz),Magnitude(dB)\n";
+  for (let i = 0; i < d.frf.length; i++) {
+    const f = i * d.sampleRate / d.fftSizeIR;
+    csv += `${f},${d.frf[i]}\n`;
+  }
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ess_response.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+};
 </script>
 </body>
 </html>
