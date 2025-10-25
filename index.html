@@ -550,10 +550,13 @@ for (let i = 0; i < fftSizeIR/2; i++){
   const mag = Math.sqrt(re*re + im*im);
   frf[i] = 20 * Math.log10(mag + 1e-12); // dB
 }
-    // 计算 frf 完成后立即加：
-window._essData = { frf: frf, sampleRate: sampleRate, fftSizeIR: fftSizeIR };
-console.log('ESS done. frf length=', frf && frf.length, 'sampleRate=', sampleRate);
+// 用 recordedBuffer 的采样率（如果有），否则退回 48000
+const sr = (typeof recordedBuffer !== 'undefined' && recordedBuffer && recordedBuffer.sampleRate)
+  ? recordedBuffer.sampleRate
+  : 48000;
 
+window._essData = { frf, sampleRate: sr, fftSizeIR };
+console.log("ESS done. frf length =", frf && frf.length, "sampleRate =", sr);
 // ======（可选）在 frf 上做背景扣除（如果你有 baselineSpectrum）=====
 if (Array.isArray(baselineSpectrum) && baselineSpectrum.length >= frf.length) {
   for (let i=0;i<frf.length;i++){
