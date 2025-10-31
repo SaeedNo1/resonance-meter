@@ -433,7 +433,7 @@ function generateESSandInverse(f1, f2, duration, sampleRate) {
 async function playAndRecordESS() {
   const f1 = parseFloat(document.getElementById("fStart").value) || 20;
   const f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
-  const dur = parseFloat(document.getElementById("essDuration").value) || 10; // ESS 时长
+  const dur = parseFloat(document.getElementById("essDur").value) || 10;
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const sampleRate = audioCtx.sampleRate;
   
