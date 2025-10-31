@@ -513,7 +513,11 @@ function fftConvolve(a, b) {
 }
   mediaRecorder.onstop = async () => {
   console.log("ESS onstop triggered");
-
+  // ========== 录音数据转换 ==========
+  const blob = new Blob(chunks, { type: 'audio/webm' });
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+  const recorded = audioBuffer.getChannelData(0);
   // ========== 基础参数 ==========
   const sr = (typeof recordedBuffer !== 'undefined' && recordedBuffer?.sampleRate) ? recordedBuffer.sampleRate : 48000;
   const fftSizeIR = 16384;
