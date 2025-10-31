@@ -431,7 +431,14 @@ function generateESSandInverse(f1, f2, duration, sampleRate) {
 
 // 播放 ESS 并录音
 async function playAndRecordESS() {
+  const N = a.length + b.length - 1;
+
+  // 转为复数组
+  const A = fft.createComplexArray();
+  const B = fft.createComplexArray();
+  const C = fft.createComplexArray();
   const fftSize = 1 << Math.ceil(Math.log2(N));
+  const out = new Float32Array(fftSize);
   const fft = new FFT(fftSize);
   const f1 = parseFloat(document.getElementById("fStart").value) || 20;
   const f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
@@ -483,13 +490,6 @@ updateHUD();
   };
   // ===== FFT 频域卷积函数 =====
 function fftConvolve(a, b) {
-  const N = a.length + b.length - 1;
-
-  // 转为复数组
-  const A = fft.createComplexArray();
-  const B = fft.createComplexArray();
-  const C = fft.createComplexArray();
-  const out = new Float32Array(fftSize);
 
   fft.realTransform(A, a);
   fft.realTransform(B, b);
