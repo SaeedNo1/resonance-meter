@@ -578,7 +578,6 @@ for (let db = Math.ceil(minVal / 10) * 10; db <= maxVal; db += 10) {
 }
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const colors = ["#007bff", "#ff4d4d", "#ff9933", "#00cc66"];
-  const minVal = Math.min(...harmonicFRFs[1]);
   const maxVal = Math.max(...harmonicFRFs[1]);
   // ========== 谐波选择器 ==========
   const selectedHarmonics = Array.from(document.querySelectorAll(".hToggle"))
