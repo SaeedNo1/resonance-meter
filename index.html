@@ -77,6 +77,11 @@
       <button onclick="location.href='Frequency.html'">准备共振</button>
     </div>
 
+    <div id="hud" style="margin-top:10px; color:#0f0; font-family:monospace;">
+      当前频率: <span id="hudFreq">—</span> Hz　
+      进度: <span id="hudProg">0</span>%
+    </div>
+
     <div style="margin-top:10px">
       <span class="pill">检测峰值：<span id="peakFreq">—</span> Hz</span>
       <span class="pill">峰值幅度：<span id="peakAmp">—</span></span>
@@ -454,7 +459,24 @@ async function playAndRecordESS() {
   // 播放
   src.connect(audioCtx.destination);
   src.start();
+  // === HUD 实时更新 ===
+const startTime = audioCtx.currentTime;
+const totalDuration = duration;
+const fStart = f1, fEnd = f2;
 
+function updateHUD() {
+  const t = audioCtx.currentTime - startTime;
+  if (t >= totalDuration) {
+    document.getElementById("hudProg").textContent = "100";
+    document.getElementById("hudFreq").textContent = fEnd.toFixed(1);
+    return;
+  }
+  const instFreq = fStart * Math.pow(fEnd / fStart, t / totalDuration); // ESS 频率瞬时值
+  document.getElementById("hudFreq").textContent = instFreq.toFixed(1);
+  document.getElementById("hudProg").textContent = ((t / totalDuration) * 100).toFixed(0);
+  requestAnimationFrame(updateHUD);
+}
+updateHUD();
   // 播放结束时停止录音
   src.onended = () => {
     mediaRecorder.stop();
@@ -662,6 +684,44 @@ document.getElementById("exportCSV").addEventListener("click", () => {
 
   alert("CSV 导出完成！");
 });
+    // ========== 5.5 计算各谐波峰值 ==========
+const peakInfo = [];
+for (const h of harmonics) {
+  const frf = harmonicFRFs[h];
+  let peakVal = -Infinity, peakIdx = 0;
+  for (let i = 0; i < frf.length; i++) {
+    if (frf[i] > peakVal) {
+      peakVal = frf[i];
+      peakIdx = i;
+    }
+  }
+  const peakFreq = (peakIdx * sr / fftSizeIR).toFixed(2);
+  peakInfo.push({ harmonic: h, freq: peakFreq, amp: peakVal.toFixed(2) });
+
+  // 绘图标注文字
+  ctx.fillStyle = "#fff";
+  ctx.font = "12px monospace";
+  const x = (peakIdx / frf.length) * canvas.width;
+  const y = canvas.height - ((frf[peakIdx] - minVal) / (maxVal - minVal + 1e-12)) * canvas.height;
+  ctx.fillText(`H${h}: ${peakFreq}Hz / ${peakVal.toFixed(1)}dB`, x + 5, y - 5);
+}
+console.table(peakInfo);
+    // ========== 5.7 自动生成分析报告 ==========
+let report = "📈 ESS 谐波响应分析报告\n\n";
+report += `主响应峰值频率: ${peakInfo[0].freq} Hz (${peakInfo[0].amp} dB)\n`;
+
+for (let i = 1; i < peakInfo.length; i++) {
+  const h = peakInfo[i];
+  const rel = (h.amp - peakInfo[0].amp).toFixed(2);
+  report += `第 ${h.harmonic} 次谐波: ${h.freq} Hz (${h.amp} dB)   相对主响应: ${rel} dB\n`;
+}
+
+// 估算信噪比
+const snr = (peakInfo[0].amp - Math.min(...peakInfo.map(h => h.amp))).toFixed(2);
+report += `\n估计信噪比(SNR): ${snr} dB\n`;
+
+document.getElementById("essReportText").textContent = report;
+console.log(report);
   // ========== 6. 保存导出数据 ==========
   window._essData = {
     sr,
