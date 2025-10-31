@@ -479,7 +479,38 @@ updateHUD();
   src.onended = () => {
     mediaRecorder.stop();
   };
+  // ===== FFT 频域卷积函数 =====
+function fftConvolve(a, b) {
+  const N = a.length + b.length - 1;
+  const fftSize = 1 << Math.ceil(Math.log2(N));
+  const fft = new FFT(fftSize);
 
+  // 转为复数组
+  const A = fft.createComplexArray();
+  const B = fft.createComplexArray();
+  const C = fft.createComplexArray();
+  const out = new Float32Array(fftSize);
+
+  fft.realTransform(A, a);
+  fft.realTransform(B, b);
+
+  // 频域乘法：C = A * B
+  for (let i = 0; i < fftSize; i += 2) {
+    const ar = A[i], ai = A[i + 1];
+    const br = B[i], bi = B[i + 1];
+    C[i] = ar * br - ai * bi;
+    C[i + 1] = ar * bi + ai * br;
+  }
+
+  fft.inverseTransform(C, C);
+
+  // 取实部
+  for (let i = 0; i < out.length; i++) {
+    out[i] = C[i] / fftSize;
+  }
+
+  return out;
+}
   mediaRecorder.onstop = async () => {
   console.log("ESS onstop triggered");
 
