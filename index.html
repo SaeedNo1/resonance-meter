@@ -461,7 +461,7 @@ async function playAndRecordESS() {
   src.start();
   // === HUD 实时更新 ===
 const startTime = audioCtx.currentTime;
-const totalDuration = duration;
+const totalDuration = dur;
 const fStart = f1, fEnd = f2;
 
 function updateHUD() {
@@ -729,7 +729,8 @@ console.log(report);
     harmonics,
     harmonicFRFs
   };
-  console.log("ESS 完成，谐波响应已保存。");
+   console.log("ESS 完成，谐波响应已保存。");
+   micStream.getTracks().forEach(track => track.stop());
   };
 };
   // 导出 ESS 谐波响应数据到 CSV
