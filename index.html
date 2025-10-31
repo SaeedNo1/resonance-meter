@@ -431,12 +431,11 @@ function generateESSandInverse(f1, f2, duration, sampleRate) {
 
 // 播放 ESS 并录音
 async function playAndRecordESS() {
-  const N = a.length + b.length - 1;
-
   // 转为复数组
   const A = fft.createComplexArray();
   const B = fft.createComplexArray();
   const C = fft.createComplexArray();
+  const N = a.length + b.length - 1;
   const fftSize = 1 << Math.ceil(Math.log2(N));
   const out = new Float32Array(fftSize);
   const fft = new FFT(fftSize);
