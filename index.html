@@ -431,6 +431,9 @@ function generateESSandInverse(f1, f2, duration, sampleRate) {
 
 // 播放 ESS 并录音
 async function playAndRecordESS() {
+  const f1 = parseFloat(document.getElementById("fStart").value) || 20;
+  const f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
+  const dur = parseFloat(document.getElementById("essDuration").value) || 10; // ESS 时长
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const sampleRate = audioCtx.sampleRate;
   
@@ -483,9 +486,6 @@ updateHUD();
   // ========== 基础参数 ==========
   const sr = (typeof recordedBuffer !== 'undefined' && recordedBuffer?.sampleRate) ? recordedBuffer.sampleRate : 48000;
   const fftSizeIR = 16384;
-  const f1 = parseFloat(document.getElementById("fStart").value) || 20;
-  const f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
-  const T = parseFloat(document.getElementById("essDuration").value) || 10; // ESS 时长
   const harmonics = [1, 2, 3, 4]; // 1为Fundamental，2、3、4次谐波
 
   // ========== 1. 基础反卷积得到 ir ==========
