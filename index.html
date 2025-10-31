@@ -59,7 +59,12 @@
       <option value="sawtooth">锯齿</option>
       <option value="square">方波</option>
     </select>
-
+    <div id="harmonicSelector" style="margin-top:8px; color:#fff;">
+    <label><input type="checkbox" class="hToggle" value="1" checked> H1</label>
+    <label><input type="checkbox" class="hToggle" value="2" checked> H2</label>
+    <label><input type="checkbox" class="hToggle" value="3" checked> H3</label>
+    <label><input type="checkbox" class="hToggle" value="4" checked> H4</label>
+    </div>
     <label>音量（播放增益，0-1，过大请谨慎）</label>
     <input id="gain" type="range" min="0" max="1" step="0.001" value="0.8" />
 
@@ -84,6 +89,11 @@
     <canvas id="plot" width="800" height="320"></canvas>
   </div>
 </div>
+  <div id="essReport" style="margin-top:10px; padding:10px; background:#111; color:#0f0; font-family:monospace; border-radius:6px;">
+  <b>分析报告：</b>
+  <pre id="essReportText">（等待 ESS 扫描结果...）</pre>
+</div>
+  
 <div style="padding:8px; margin-top:8px;">
   <button id="tapDetectBtn">敲击检测（录音 2s）</button>
   <label style="margin-left:10px;">
@@ -451,140 +461,251 @@ async function playAndRecordESS() {
   };
 
   mediaRecorder.onstop = async () => {
-    let frf = [];
-    console.log("onstop started");
-    const blob = new Blob(chunks);
-    const arrayBuffer = await blob.arrayBuffer();
-    const recordedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-    const recorded = recordedBuffer.getChannelData(0);
+  console.log("ESS onstop triggered");
 
-    console.log("ESS 录音完成，长度:", recorded.length);
-    alert("指数正弦扫录音完成！请在控制台查看数据。");
-    // TODO: 在这里调用 deconvolve(recorded, ess) 做去卷积
-    console.log("ESS 录音完成，长度:", recorded.length);
+  // ========== 基础参数 ==========
+  const sr = (typeof recordedBuffer !== 'undefined' && recordedBuffer?.sampleRate) ? recordedBuffer.sampleRate : 48000;
+  const fftSizeIR = 16384;
+  const f1 = parseFloat(document.getElementById("fStart").value) || 20;
+  const f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
+  const T = parseFloat(document.getElementById("essDuration").value) || 10; // ESS 时长
+  const harmonics = [1, 2, 3, 4]; // 1为Fundamental，2、3、4次谐波
 
-    // ====== 计算频率响应 FRF ======
-    const fftSize = 16384; // 2的幂，决定频率分辨率
-    const fft = new FFT(fftSize);
+  // ========== 1. 基础反卷积得到 ir ==========
+  console.log("开始反卷积...");
+  const ir = fftConvolve(recorded, inv, fft); // 你已有的函数
 
-    // FFT 输入 buffer
-    const input = new Array(fftSize).fill(0);
-    const output = fft.createComplexArray();
+  // ========== 2. 主响应(线性部分)对齐 ==========
+  const peakIndex = ir.indexOf(Math.max(...ir.map(v => Math.abs(v))));
+  const irAligned = ir.slice(peakIndex, peakIndex + fftSizeIR);
 
-    // 录音数据放进去（截断或零填充）
-    for (let i = 0; i < Math.min(recorded.length, fftSize); i++) {
-      input[i] = recorded[i];
+  // ========== 3. 预定义存储容器 ==========
+  const harmonicIRs = {}; // 每个谐波的IR
+  const harmonicFRFs = {}; // 每个谐波的频响
+
+  // ========== 4. 遍历谐波提取响应（后续我们逐步实现） ==========
+  for (const h of harmonics) {
+    console.log(`提取第 ${h} 次谐波...`);
+    // TODO: 在这里对 irAligned 进行切窗、提取对应谐波的时域响应
+    // 提示: 使用 ESS 理论时间偏移公式 t_h = (Math.log(h) / Math.log(f2 / f1)) * T
+     // === Step 1: 计算该谐波在 IR 中的时间偏移位置 ===
+    const t_h = (Math.log(h) / Math.log(f2 / f1)) * T; // ESS 理论偏移（秒）
+    const start = Math.floor(t_h * sr);
+    const winSize = Math.floor(0.02 * sr); // 取20ms窗口，可调
+    const end = Math.min(start + winSize, irAligned.length);
+
+    // === Step 2: 提取并加窗（Hann窗） ===
+    const irH = new Float32Array(winSize);
+    for (let i = 0; i < winSize; i++) {
+      const idx = start + i;
+      if (idx < irAligned.length) {
+        const w = 0.5 * (1 - Math.cos(2 * Math.PI * i / (winSize - 1)));
+        irH[i] = irAligned[idx] * w;
     }
-
-    // Y(f)
-    fft.realTransform(output, input);
-    fft.completeSpectrum(output);
-
-    // X(f) （理想 ESS）
-    const essInput = new Array(fftSize).fill(0);
-    for (let i = 0; i < Math.min(ess.length, fftSize); i++) {
-       essInput[i] = ess[i];
-    }
-    const essOut = fft.createComplexArray();
-    fft.realTransform(essOut, essInput);
-    fft.completeSpectrum(essOut);
-
-   // 录音结果 → 反卷积得到冲激响应
-function convolve(x, h) {
-  const y = new Float32Array(x.length + h.length - 1);
-  for (let n = 0; n < y.length; n++) {
-    let sum = 0;
-    for (let k = 0; k < h.length; k++) {
-      if (n - k >= 0 && n - k < x.length) {
-        sum += x[n - k] * h[k];
-      }
-    }
-    y[n] = sum;
   }
-  return y;
-}
+    harmonicIRs[h] = irH;
 
-    // 用 FFT 做快速卷积（即反卷积）
-function fftConvolve(x, h, fft) {
-  const N = 1 << Math.ceil(Math.log2(x.length + h.length));
-  const X = fft.createComplexArray();
-  const H = fft.createComplexArray();
-  const Y = fft.createComplexArray();
+    // 做 FFT 得到频响
+    const out = fft.createComplexArray();
+    const buf = new Float32Array(fftSizeIR);
+    buf.set(irH.slice(0, fftSizeIR));
+    fft.realTransform(out, buf);
+    fft.completeSpectrum(out);
 
-  const xbuf = new Float32Array(N);
-  const hbuf = new Float32Array(N);
-  xbuf.set(x);
-  hbuf.set(h);
-
-  fft.realTransform(X, xbuf);
-  fft.completeSpectrum(X);
-  fft.realTransform(H, hbuf);
-  fft.completeSpectrum(H);
-
-  for (let i=0;i<X.length;i+=2){
-    const xr=X[i], xi=X[i+1], hr=H[i], hi=H[i+1];
-    Y[i]   = xr*hr - xi*hi;
-    Y[i+1] = xr*hi + xi*hr;
+    const frf = new Float32Array(fftSizeIR / 2);
+    for (let i = 0; i < fftSizeIR / 2; i++) {
+      const re = out[2 * i], im = out[2 * i + 1];
+      frf[i] = 20 * Math.log10(Math.sqrt(re * re + im * im) + 1e-12);
+    }
+    harmonicFRFs[h] = frf;
   }
 
-  const out = new Float32Array(N);
-  fft.realTransform(out, Y);
-  return out;
+  // ========== 5. 绘图 ==========
+  const canvas = document.getElementById("plot");
+  const ctx = canvas.getContext("2d");
+// 找到所有谐波的整体幅度范围
+let globalMin = Infinity, globalMax = -Infinity;
+for (const h of harmonics) {
+  const arr = harmonicFRFs[h];
+  const localMin = Math.min(...arr);
+  const localMax = Math.max(...arr);
+  if (localMin < globalMin) globalMin = localMin;
+  if (localMax > globalMax) globalMax = localMax;
 }
 
-// === 反卷积得到冲激响应（频域卷积 already done） ===
-const ir = fftConvolve(recorded, inv, fft); // 已得 ir（时间域）
+// 自动归一化范围（dBFS）
+const minVal = globalMin;
+const maxVal = globalMax;
+const dbRange = maxVal - minVal;
 
-// ====== 对 IR 做 FFT，得到频率响应 FRF ======
-const fftSizeIR = fftSize; // 16384 或你选择的尺寸
-const irBuf = new Float32Array(fftSizeIR);
-irBuf.set(ir.subarray(0, Math.min(ir.length, fftSizeIR))); // 截断或零填充
-const irOut = fft.createComplexArray();
-fft.realTransform(irOut, irBuf);
-fft.completeSpectrum(irOut);
+// 绘制背景与参考线
+ctx.fillStyle = "#000";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-// 计算幅度（dB）
-window.frf = new Float32Array(fftSizeIR/2);
-for (let i = 0; i < fftSizeIR/2; i++){
-  const re = irOut[2*i], im = irOut[2*i+1];
-  const mag = Math.sqrt(re*re + im*im);
-  frf[i] = 20 * Math.log10(mag + 1e-12); // dB
+ctx.strokeStyle = "#333";
+ctx.lineWidth = 1;
+ctx.font = "10px monospace";
+ctx.fillStyle = "#888";
+for (let db = Math.ceil(minVal / 10) * 10; db <= maxVal; db += 10) {
+  const y = canvas.height - ((db - minVal) / dbRange) * canvas.height;
+  ctx.beginPath();
+  ctx.moveTo(0, y);
+  ctx.lineTo(canvas.width, y);
+  ctx.stroke();
+  ctx.fillText(`${db} dBFS`, 5, y - 2);
 }
-// 用 recordedBuffer 的采样率（如果有），否则退回 48000
-const sr = (typeof recordedBuffer !== 'undefined' && recordedBuffer && recordedBuffer.sampleRate)
-  ? recordedBuffer.sampleRate
-  : 48000;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const colors = ["#007bff", "#ff4d4d", "#ff9933", "#00cc66"];
+  const minVal = Math.min(...harmonicFRFs[1]);
+  const maxVal = Math.max(...harmonicFRFs[1]);
+  // ========== 谐波选择器 ==========
+  const selectedHarmonics = Array.from(document.querySelectorAll(".hToggle"))
+    .filter(cb => cb.checked)
+    .map(cb => parseInt(cb.value));
+  selectedHarmonics.forEach((h, idx) => {
+    const frf = harmonicFRFs[h];
+    ctx.beginPath();
+    ctx.strokeStyle = colors[idx % colors.length];
+    for (let i = 0; i < frf.length; i++) {
+      const f = i * sr / fftSizeIR;
+      if (f > 20000) break;
+      const x = (f / 20000) * canvas.width;
+      const norm = (frf[i] - minVal) / (maxVal - minVal + 1e-12);
+      const y = canvas.height - norm * canvas.height;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.fillText(`${h}x`, 10, 20 + idx * 15);
+  });
+    // 监听复选框状态变化重新绘图
+  document.querySelectorAll(".hToggle").forEach(cb => {
+    cb.addEventListener("change", () => {
+      mediaRecorder.onstop(); // 重新触发绘图（不重新录音）
+    });
+  });
+    // ========== 5.6 鼠标悬停交互 ==========
+let hoverLine = null;
+const hoverInfo = document.createElement("div");
+hoverInfo.style.position = "absolute";
+hoverInfo.style.background = "rgba(0,0,0,0.7)";
+hoverInfo.style.color = "#0f0";
+hoverInfo.style.font = "12px monospace";
+hoverInfo.style.padding = "2px 6px";
+hoverInfo.style.borderRadius = "4px";
+hoverInfo.style.display = "none";
+document.body.appendChild(hoverInfo);
 
-window._essData = { frf, sampleRate: sr, fftSizeIR };
-console.log("ESS done. frf length =", frf && frf.length, "sampleRate =", sr);
-// ======（可选）在 frf 上做背景扣除（如果你有 baselineSpectrum）=====
-if (Array.isArray(baselineSpectrum) && baselineSpectrum.length >= frf.length) {
-  for (let i=0;i<frf.length;i++){
-    frf[i] = frf[i] - (baselineSpectrum[i] || 0); // 你也可以选择阈值/比值法
+canvas.addEventListener("mousemove", e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const freq = (x / canvas.width) * (sr / 2);
+  const i = Math.floor((freq / (sr / 2)) * (fftSizeIR / 2));
+
+  if (i < 0 || i >= fftSizeIR / 2) {
+    hoverInfo.style.display = "none";
+    return;
   }
-}
 
-// ====== 绘图（自动归一化） ======
-const canvas = document.getElementById("plot");
-const ctx = canvas.getContext("2d");
-const sampleRate = audioCtx.sampleRate; // 使用同一 audioCtx
-const minVal = Math.min(...frf);
-const maxVal = Math.max(...frf);
+  // 获取主谐波幅度
+  const mainFRF = harmonicFRFs[1];
+  const amp = mainFRF[i].toFixed(2);
 
-ctx.clearRect(0,0,canvas.width,canvas.height);
-ctx.beginPath();
-for (let i = 0; i < frf.length; i++) {
-  const f = i * sampleRate / fftSizeIR;
-  if (f > 20000) break;
-  const x = (f / 20000) * canvas.width;
-  const norm = (frf[i] - minVal) / (maxVal - minVal + 1e-12);
-  const y = canvas.height - norm * canvas.height;
-  if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-}
-ctx.strokeStyle = "blue";
-ctx.stroke();
+  // 绘制竖线
+  ctx.save();
+  ctx.beginPath();
+  ctx.strokeStyle = "#0f0";
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x, canvas.height);
+  ctx.stroke();
+  ctx.restore();
+
+  // 显示信息
+  hoverInfo.innerHTML = `f = ${freq.toFixed(1)} Hz<br>${amp} dB`;
+  hoverInfo.style.left = e.pageX + 10 + "px";
+  hoverInfo.style.top = e.pageY - 20 + "px";
+  hoverInfo.style.display = "block";
+});
+
+canvas.addEventListener("mouseleave", () => {
+  hoverInfo.style.display = "none";
+});
+   // 导出 ESS 谐波响应数据到 CSV
+document.getElementById("exportCSV").addEventListener("click", () => {
+  if (!window._essData) {
+    alert("请先运行 ESS 扫描！");
+    return;
+  }
+
+  const { sr, fftSizeIR, harmonics, harmonicFRFs } = window._essData;
+  let csv = "Freq(Hz)";
+  harmonics.forEach(h => csv += `,H${h}(dB)`);
+  csv += "\n";
+
+  const points = fftSizeIR / 2;
+  for (let i = 0; i < points; i++) {
+    const f = i * sr / fftSizeIR;
+    csv += f.toFixed(2);
+    harmonics.forEach(h => {
+      csv += `,${harmonicFRFs[h][i].toFixed(3)}`;
+    });
+    csv += "\n";
+  }
+
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ESS_Harmonics.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+
+  alert("CSV 导出完成！");
+});
+  // ========== 6. 保存导出数据 ==========
+  window._essData = {
+    sr,
+    fftSizeIR,
+    f1,
+    f2,
+    harmonics,
+    harmonicFRFs
+  };
+  console.log("ESS 完成，谐波响应已保存。");
   };
 };
+  // 导出 ESS 谐波响应数据到 CSV
+document.getElementById("exportCSV").addEventListener("click", () => {
+  if (!window._essData) {
+    alert("请先运行 ESS 扫描！");
+    return;
+  }
+
+  const { sr, fftSizeIR, harmonics, harmonicFRFs } = window._essData;
+  let csv = "Freq(Hz)";
+  harmonics.forEach(h => csv += `,H${h}(dB)`);
+  csv += "\n";
+
+  const points = fftSizeIR / 2;
+  for (let i = 0; i < points; i++) {
+    const f = i * sr / fftSizeIR;
+    csv += f.toFixed(2);
+    harmonics.forEach(h => {
+      csv += `,${harmonicFRFs[h][i].toFixed(3)}`;
+    });
+    csv += "\n";
+  }
+
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ESS_Harmonics.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+
+  alert("CSV 导出完成！");
+});
   // =============== 按钮绑定 ===============
   document.getElementById("essBtn").onclick = playAndRecordESS;
   //===============敲击检测====================
