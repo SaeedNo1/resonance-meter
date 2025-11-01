@@ -115,8 +115,9 @@
 <script>
 let audioCtx = null;
 let baselineSpectrum = null;
-let f1=0;
-let f2=0;
+let f1 = 0;
+let f2 = 0;
+let sampleRate = 44100;
 (async function(){
   const $ = id => document.getElementById(id);
   let micStream = null;
@@ -517,7 +518,7 @@ function fftConvolve(a, b) {
   f1 = parseFloat(document.getElementById("fStart").value) || 20;
   f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
   const dur = parseFloat(document.getElementById("essDur").value) || 10;
-  const sampleRate = audioCtx.sampleRate;
+  sampleRate = audioCtx.sampleRate;
   // ========== 基础参数 ==========
   const sr = (typeof recordedBuffer !== 'undefined' && recordedBuffer?.sampleRate) ? recordedBuffer.sampleRate : 48000;
   const fftSizeIR = 16384;
