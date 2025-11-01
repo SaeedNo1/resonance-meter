@@ -439,6 +439,23 @@ async function playAndRecordESS() {
   const { sweep:ess, inv } = generateESSandInverse(f1, f2, dur, sampleRate);
 
   // 准备 buffer 播放
+  console.log('DBG audioCtx:', audioCtx);
+  console.log('DBG ess:', ess);
+  console.log('DBG ess.length:', ess && ess.length);
+  console.log('DBG sampleRate:', sampleRate);
+
+  if (!audioCtx) {
+    console.warn('audioCtx 未初始化 —— 现在尝试初始化（应在用户交互内进行）');
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch(e){ console.error('初始化 audioCtx 失败', e); }
+  }
+
+  if (!ess || typeof ess.length !== 'number') {
+    throw new Error('ESS 数据不存在或格式错误: 请确保变量 ess 为 Float32Array 或普通数组，且有 length');
+  }
+  if (!sampleRate || typeof sampleRate !== 'number') {
+    throw new Error('sampleRate 未定义或格式不对：请确保已设置 sampleRate');
+  }
   const buffer = audioCtx.createBuffer(1, ess.length, sampleRate);
   buffer.copyToChannel(ess, 0, 0);
   const src = audioCtx.createBufferSource();
