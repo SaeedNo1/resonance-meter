@@ -432,6 +432,7 @@ function generateESSandInverse(f1, f2, duration, sampleRate) {
 // 播放 ESS 并录音
 async function playAndRecordESS() {
   // 转为复数组
+  let chunks = [];
   const blob = new Blob(chunks, { type: 'audio/webm' });
   const arrayBuffer = await blob.arrayBuffer();
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
@@ -461,7 +462,6 @@ async function playAndRecordESS() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const mediaRecorder = new MediaRecorder(stream);
 
-  let chunks = [];
   mediaRecorder.ondataavailable = e => chunks.push(e.data);
 
   mediaRecorder.start();
