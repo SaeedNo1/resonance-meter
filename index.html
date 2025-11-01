@@ -115,6 +115,8 @@
 <script>
 let audioCtx = null;
 let baselineSpectrum = null;
+let f1=0;
+let f2=0;
 (async function(){
   const $ = id => document.getElementById(id);
   let micStream = null;
@@ -512,8 +514,8 @@ function fftConvolve(a, b) {
   const A = fft.createComplexArray();
   const B = fft.createComplexArray();
   const C = fft.createComplexArray();
-  const f1 = parseFloat(document.getElementById("fStart").value) || 20;
-  const f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
+  f1 = parseFloat(document.getElementById("fStart").value) || 20;
+  f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
   const dur = parseFloat(document.getElementById("essDur").value) || 10;
   const sampleRate = audioCtx.sampleRate;
   // ========== 基础参数 ==========
