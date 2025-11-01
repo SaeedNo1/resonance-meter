@@ -118,6 +118,7 @@ let baselineSpectrum = null;
 let f1 = 0;
 let f2 = 0;
 let sampleRate = 44100;
+let audioCtx;
 (async function(){
   const $ = id => document.getElementById(id);
   let micStream = null;
@@ -502,6 +503,9 @@ function fftConvolve(a, b) {
 }
   mediaRecorder.onstop = async () => {
   console.log("ESS onstop triggered");
+  if (!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
   // ========== 录音数据转换 ==========
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const blob = new Blob(chunks, { type: 'audio/webm' });
