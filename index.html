@@ -433,24 +433,7 @@ function generateESSandInverse(f1, f2, duration, sampleRate) {
 async function playAndRecordESS() {
   // 转为复数组
   let chunks = [];
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const blob = new Blob(chunks, { type: 'audio/webm' });
-  const arrayBuffer = await blob.arrayBuffer();
-  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-  const recorded = audioBuffer.getChannelData(0);
-  const N = a.length + b.length - 1;
-  const fftSize = 1 << Math.ceil(Math.log2(N));
-  const out = new Float32Array(fftSize);
-  const fft = new FFT(fftSize);
-  const A = fft.createComplexArray();
-  const B = fft.createComplexArray();
-  const C = fft.createComplexArray();
-  const f1 = parseFloat(document.getElementById("fStart").value) || 20;
-  const f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
-  const dur = parseFloat(document.getElementById("essDur").value) || 10;
-  const sampleRate = audioCtx.sampleRate;
-  
- const { sweep:ess, inv } = generateESSandInverse(f1, f2, dur, sampleRate);
+  const { sweep:ess, inv } = generateESSandInverse(f1, f2, dur, sampleRate);
 
   // 准备 buffer 播放
   const buffer = audioCtx.createBuffer(1, ess.length, sampleRate);
@@ -517,6 +500,22 @@ function fftConvolve(a, b) {
   mediaRecorder.onstop = async () => {
   console.log("ESS onstop triggered");
   // ========== 录音数据转换 ==========
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const blob = new Blob(chunks, { type: 'audio/webm' });
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+  const recorded = audioBuffer.getChannelData(0);
+  const N = ess.length + inv.length - 1;
+  const fftSize = 1 << Math.ceil(Math.log2(N));
+  const out = new Float32Array(fftSize);
+  const fft = new FFT(fftSize);
+  const A = fft.createComplexArray();
+  const B = fft.createComplexArray();
+  const C = fft.createComplexArray();
+  const f1 = parseFloat(document.getElementById("fStart").value) || 20;
+  const f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
+  const dur = parseFloat(document.getElementById("essDur").value) || 10;
+  const sampleRate = audioCtx.sampleRate;
   // ========== 基础参数 ==========
   const sr = (typeof recordedBuffer !== 'undefined' && recordedBuffer?.sampleRate) ? recordedBuffer.sampleRate : 48000;
   const fftSizeIR = 16384;
