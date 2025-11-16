@@ -394,6 +394,7 @@ src.connect(analyser);
 
 // 生成 ESS 波形
 function generateESS(f1, f2, duration, sampleRate) {
+  let ess, inv;
   const N = Math.floor(duration * sampleRate);
   const sweep = new Float32Array(N);
 
@@ -431,10 +432,12 @@ function generateESSandInverse(f1, f2, duration, sampleRate) {
 
 // 播放 ESS 并录音
 async function playAndRecordESS() {
+  f1 = parseFloat(document.getElementById("fStart").value) || 20;
+  f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
+  const dur = parseFloat(document.getElementById("essDur").value) || 10;
   // 转为复数组
   let chunks = [];
-  const { sweep:ess, inv } = generateESSandInverse(f1, f2, dur, sampleRate);
-
+  ({ sweep:ess, inv } = generateESSandInverse(f1, f2, dur, sampleRate));
   // 准备 buffer 播放
   console.log('DBG audioCtx:', audioCtx);
   console.log('DBG ess:', ess);
@@ -491,29 +494,6 @@ updateHUD();
   src.onended = () => {
     mediaRecorder.stop();
   };
-  // ===== FFT 频域卷积函数 =====
-function fftConvolve(a, b) {
-
-  fft.realTransform(A, a);
-  fft.realTransform(B, b);
-
-  // 频域乘法：C = A * B
-  for (let i = 0; i < fftSize; i += 2) {
-    const ar = A[i], ai = A[i + 1];
-    const br = B[i], bi = B[i + 1];
-    C[i] = ar * br - ai * bi;
-    C[i + 1] = ar * bi + ai * br;
-  }
-
-  fft.inverseTransform(C, C);
-
-  // 取实部
-  for (let i = 0; i < out.length; i++) {
-    out[i] = C[i] / fftSize;
-  }
-
-  return out;
-}
   mediaRecorder.onstop = async () => {
   console.log("ESS onstop triggered");
   if (!audioCtx){
@@ -532,18 +512,40 @@ function fftConvolve(a, b) {
   const A = fft.createComplexArray();
   const B = fft.createComplexArray();
   const C = fft.createComplexArray();
-  f1 = parseFloat(document.getElementById("fStart").value) || 20;
-  f2 = parseFloat(document.getElementById("fEnd").value) || 20000;
-  const dur = parseFloat(document.getElementById("essDur").value) || 10;
   sampleRate = audioCtx.sampleRate;
   // ========== 基础参数 ==========
-  const sr = (typeof recordedBuffer !== 'undefined' && recordedBuffer?.sampleRate) ? recordedBuffer.sampleRate : 48000;
+  const sr = audioBuffer.sampleRate;
   const fftSizeIR = 16384;
   const harmonics = [1, 2, 3, 4]; // 1为Fundamental，2、3、4次谐波
 
   // ========== 1. 基础反卷积得到 ir ==========
   console.log("开始反卷积...");
-  const ir = fftConvolve(recorded, inv, fft); // 你已有的函数
+  // 为卷积准备数据：创建正确大小的“填充”数组
+const aPadded = new Float32Array(fftSize);
+const bPadded = new Float32Array(fftSize);
+aPadded.set(recorded); // 把录音数据放进去
+bPadded.set(inv);      // 把反向声音放进去
+
+// 1. 转换到频域
+fft.realTransform(A, aPadded);
+fft.realTransform(B, bPadded);
+
+// 2. 频域相乘 (C = A * B)
+for (let i = 0; i < fftSize; i += 2) {
+  const ar = A[i], ai = A[i + 1];
+  const br = B[i], bi = B[i + 1];
+  C[i] = ar * br - ai * bi;       // 实部
+  C[i + 1] = ar * bi + ai * br; // 虚部
+}
+
+// 3. 转换回时域
+fft.inverseTransform(C, C);
+
+// 4. 取出结果 (ir)
+const ir = new Float32Array(fftSize);
+for (let i = 0; i < ir.length; i++) {
+  ir[i] = C[i] / fftSize; // (除以 fftSize 是规范化)
+} // 你已有的函数
 
   // ========== 2. 主响应(线性部分)对齐 ==========
   const peakIndex = ir.indexOf(Math.max(...ir.map(v => Math.abs(v))));
