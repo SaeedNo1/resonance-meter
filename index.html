@@ -152,9 +152,6 @@ let audioCtx;
     g.fillText('频率 (Hz)', plot.width/2-20, plot.height-6);
     g.fillText('响应 (相对幅度)', 6, 18);
   }
-  if (baselineSpectrum && spectrum && spectrum.length) {
-  spectrum = spectrum.map((v, i) => Math.max(0, v - (baselineSpectrum[i] || 0)));
-  }
   function drawCurve(points){
     clearPlot();
     if (!points || points.length===0) return;
@@ -369,7 +366,7 @@ let audioCtx;
   });
 document.getElementById("baselineBtn").onclick = async () => {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const src = audioCtx.createMediaStreamSource(stream);
+  let src = audioCtx.createMediaStreamSource(stream);
 if (document.getElementById("enableHPF").checked) {
   const highpass = audioCtx.createBiquadFilter();
   highpass.type = "highpass";
