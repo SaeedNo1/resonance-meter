@@ -656,7 +656,7 @@ for (let db = Math.ceil(minVal / 10) * 10; db <= maxVal; db += 10) {
   });
     // ========== 5.6 鼠标悬停交互 ==========
   canvas.addEventListener("mousemove", e => {
-    javascript if (!window._essData) return; // 如果数据还没好，就什么也不做 
+    if (!window._essData) return; // 如果数据还没好，就什么也不做 
     const { sr, fftSizeIR, harmonicFRFs } = window._essData;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
