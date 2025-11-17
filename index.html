@@ -655,27 +655,18 @@ for (let db = Math.ceil(minVal / 10) * 10; db <= maxVal; db += 10) {
     });
   });
     // ========== 5.6 鼠标悬停交互 ==========
-let hoverLine = null;
-const hoverInfo = document.createElement("div");
-hoverInfo.style.position = "absolute";
-hoverInfo.style.background = "rgba(0,0,0,0.7)";
-hoverInfo.style.color = "#0f0";
-hoverInfo.style.font = "12px monospace";
-hoverInfo.style.padding = "2px 6px";
-hoverInfo.style.borderRadius = "4px";
-hoverInfo.style.display = "none";
-document.body.appendChild(hoverInfo);
+  canvas.addEventListener("mousemove", e => {
+    javascript if (!window._essData) return; // 如果数据还没好，就什么也不做 
+    const { sr, fftSizeIR, harmonicFRFs } = window._essData;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const freq = (x / canvas.width) * (sr / 2);
+    const i = Math.floor((freq / (sr / 2)) * (fftSizeIR / 2));
 
-canvas.addEventListener("mousemove", e => {
-  const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const freq = (x / canvas.width) * (sr / 2);
-  const i = Math.floor((freq / (sr / 2)) * (fftSizeIR / 2));
-
-  if (i < 0 || i >= fftSizeIR / 2) {
-    hoverInfo.style.display = "none";
-    return;
-  }
+    if (i < 0 || i >= fftSizeIR / 2) {
+      hoverInfo.style.display = "none";
+      return;
+    }
 
   // 获取主谐波幅度
   const mainFRF = harmonicFRFs[1];
@@ -817,6 +808,17 @@ document.getElementById("exportCSV").addEventListener("click", () => {
 });
   // =============== 按钮绑定 ===============
   document.getElementById("essBtn").onclick = playAndRecordESS;
+  //鼠标交互
+  let hoverLine = null;
+  const hoverInfo = document.createElement("div");
+  hoverInfo.style.position = "absolute";
+  hoverInfo.style.background = "rgba(0,0,0,0.7)";
+  hoverInfo.style.color = "#0f0";
+  hoverInfo.style.font = "12px monospace";
+  hoverInfo.style.padding = "2px 6px";
+  hoverInfo.style.borderRadius = "4px";
+  hoverInfo.style.display = "none";
+  document.body.appendChild(hoverInfo);
   //===============敲击检测====================
 (async function(){
   const $ = id => document.getElementById(id);
