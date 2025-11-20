@@ -691,12 +691,6 @@ for (let db = Math.ceil(minVal / 10) * 10; db <= maxVal; db += 10) {
 canvas.addEventListener("mouseleave", () => {
   hoverInfo.style.display = "none";
 });
-   // 导出 ESS 谐波响应数据到 CSV
-document.getElementById("exportCSV").addEventListener("click", () => {
-  if (!window._essData) {
-    alert("请先运行 ESS 扫描！");
-    return;
-  }
 
   const { sr, fftSizeIR, harmonics, harmonicFRFs } = window._essData;
   let csv = "Freq(Hz)";
