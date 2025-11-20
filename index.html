@@ -656,6 +656,7 @@ for (let db = Math.ceil(minVal / 10) * 10; db <= maxVal; db += 10) {
   });
     // ========== 5.6 鼠标悬停交互 ==========
   canvas.addEventListener("mousemove", e => {
+     const { sr, fftSizeIR, harmonics, harmonicFRFs } = window._essData;
     if (!window._essData) return; // 如果数据还没好，就什么也不做 
     const { sr, fftSizeIR, harmonicFRFs } = window._essData;
     const rect = canvas.getBoundingClientRect();
@@ -692,7 +693,6 @@ canvas.addEventListener("mouseleave", () => {
   hoverInfo.style.display = "none";
 });
 
-  const { sr, fftSizeIR, harmonics, harmonicFRFs } = window._essData;
   let csv = "Freq(Hz)";
   harmonics.forEach(h => csv += `,H${h}(dB)`);
   csv += "\n";
