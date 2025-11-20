@@ -514,7 +514,7 @@ updateHUD();
   const C = fft.createComplexArray();
   sampleRate = audioCtx.sampleRate;
   // ========== 基础参数 ==========
-  const sr = audioBuffer.sampleRate;
+  let sr = audioBuffer.sampleRate;
   const fftSizeIR = 16384;
   const harmonics = [1, 2, 3, 4]; // 1为Fundamental，2、3、4次谐波
 
