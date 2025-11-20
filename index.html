@@ -98,7 +98,7 @@
   <b>分析报告：</b>
   <pre id="essReportText">（等待 ESS 扫描结果...）</pre>
 </div>
-  
+
 <div style="padding:8px; margin-top:8px;">
   <button id="tapDetectBtn">敲击检测（录音 2s）</button>
   <label style="margin-left:10px;">
@@ -514,7 +514,7 @@ updateHUD();
   const C = fft.createComplexArray();
   sampleRate = audioCtx.sampleRate;
   // ========== 基础参数 ==========
-  let sr = audioBuffer.sampleRate;
+  const sr = audioBuffer.sampleRate;
   const fftSizeIR = 16384;
   const harmonics = [1, 2, 3, 4]; // 1为Fundamental，2、3、4次谐波
 
@@ -656,7 +656,7 @@ for (let db = Math.ceil(minVal / 10) * 10; db <= maxVal; db += 10) {
   });
     // ========== 5.6 鼠标悬停交互 ==========
   canvas.addEventListener("mousemove", e => {
-     const { sr, fftSizeIR, harmonics, harmonicFRFs } = window._essData;
+    javascript if (!window._essData) return; // 如果数据还没好，就什么也不做 
     if (!window._essData) return; // 如果数据还没好，就什么也不做 
     const { sr, fftSizeIR, harmonicFRFs } = window._essData;
     const rect = canvas.getBoundingClientRect();
@@ -692,7 +692,14 @@ for (let db = Math.ceil(minVal / 10) * 10; db <= maxVal; db += 10) {
 canvas.addEventListener("mouseleave", () => {
   hoverInfo.style.display = "none";
 });
+   // 导出 ESS 谐波响应数据到 CSV
+document.getElementById("exportCSV").addEventListener("click", () => {
+  if (!window._essData) {
+    alert("请先运行 ESS 扫描！");
+    return;
+  }
 
+  const { sr, fftSizeIR, harmonics, harmonicFRFs } = window._essData;
   let csv = "Freq(Hz)";
   harmonics.forEach(h => csv += `,H${h}(dB)`);
   csv += "\n";
@@ -769,6 +776,12 @@ console.log(report);
   };
 };
   // 导出 ESS 谐波响应数据到 CSV
+document.getElementById("exportCSV").addEventListener("click", () => {
+  if (!window._essData) {
+    alert("请先运行 ESS 扫描！");
+    return;
+  }
+
   const { sr, fftSizeIR, harmonics, harmonicFRFs } = window._essData;
   let csv = "Freq(Hz)";
   harmonics.forEach(h => csv += `,H${h}(dB)`);
