@@ -561,7 +561,7 @@ for (let i = 0; i < ir.length; i++) {
     // TODO: 在这里对 irAligned 进行切窗、提取对应谐波的时域响应
     // 提示: 使用 ESS 理论时间偏移公式 t_h = (Math.log(h) / Math.log(f2 / f1)) * T
      // === Step 1: 计算该谐波在 IR 中的时间偏移位置 ===
-    const t_h = (Math.log(h) / Math.log(f2 / f1)) * T; // ESS 理论偏移（秒）
+    const t_h = (Math.log(h) / Math.log(f2 / f1)) * dur; // ESS 理论偏移（秒）
     const start = Math.floor(t_h * sr);
     const winSize = Math.floor(0.02 * sr); // 取20ms窗口，可调
     const end = Math.min(start + winSize, irAligned.length);
