@@ -649,26 +649,8 @@ for (let db = Math.ceil(minVal / 10) * 10; db <= maxVal; db += 10) {
     ctx.fillText(`${h}x`, 10, 20 + idx * 15);
   });
     // 监听复选框状态变化重新绘图
-  document.querySelectorAll(".hToggle").forEach(cb => {
-    cb.addEventListener("change", () => {
-      mediaRecorder.onstop(); // 重新触发绘图（不重新录音）
-    });
-  });
+
     // ========== 5.6 鼠标悬停交互 ==========
-  canvas.addEventListener("mousemove", e => {
-    if (!window._essData) return; // 如果数据还没好，就什么也不做 
-    if (!window._essData) return; // 如果数据还没好，就什么也不做 
-    const { sr, fftSizeIR, harmonicFRFs } = window._essData;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const freq = (x / canvas.width) * (sr / 2);
-    const i = Math.floor((freq / (sr / 2)) * (fftSizeIR / 2));
-
-    if (i < 0 || i >= fftSizeIR / 2) {
-      hoverInfo.style.display = "none";
-      return;
-    }
-
   // 获取主谐波幅度
   const mainFRF = harmonicFRFs[1];
   const amp = mainFRF[i].toFixed(2);
@@ -687,7 +669,7 @@ for (let db = Math.ceil(minVal / 10) * 10; db <= maxVal; db += 10) {
   hoverInfo.style.left = e.pageX + 10 + "px";
   hoverInfo.style.top = e.pageY - 20 + "px";
   hoverInfo.style.display = "block";
-});
+  });
 
 canvas.addEventListener("mouseleave", () => {
   hoverInfo.style.display = "none";
@@ -698,6 +680,11 @@ document.getElementById("exportCSV").addEventListener("click", () => {
     alert("请先运行 ESS 扫描！");
     return;
   }
+   document.querySelectorAll(".hToggle").forEach(cb => {
+    cb.addEventListener("change", () => {
+      mediaRecorder.onstop(); // 重新触发绘图（不重新录音）
+    });
+  });
 
   const { sr, fftSizeIR, harmonics, harmonicFRFs } = window._essData;
   let csv = "Freq(Hz)";
