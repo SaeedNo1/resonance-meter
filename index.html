@@ -761,7 +761,7 @@ console.log(report);
    console.log("ESS 完成，谐波响应已保存。");
    micStream.getTracks().forEach(track => track.stop());
   };
-};
+
   // 导出 ESS 谐波响应数据到 CSV
 document.getElementById("exportCSV").addEventListener("click", () => {
   if (!window._essData) {
