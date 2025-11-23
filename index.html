@@ -669,7 +669,7 @@ for (let db = Math.ceil(minVal / 10) * 10; db <= maxVal; db += 10) {
   hoverInfo.style.left = e.pageX + 10 + "px";
   hoverInfo.style.top = e.pageY - 20 + "px";
   hoverInfo.style.display = "block";
-  });
+  };
 
 canvas.addEventListener("mouseleave", () => {
   hoverInfo.style.display = "none";
