@@ -962,7 +962,6 @@ document.getElementById("exportCSV").addEventListener("click", () => {
 
       // stop tracks
       stream.getTracks().forEach(t=>t.stop());
-      audioCtx.close();
 
     } catch (e) {
       console.error(e);
