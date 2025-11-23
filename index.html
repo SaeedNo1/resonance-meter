@@ -676,9 +676,50 @@ canvas.addEventListener("mouseleave", () => {
 });
    // 导出 ESS 谐波响应数据到 CSV
 document.getElementById("exportCSV").addEventListener("click", () => {
-  if (!window._essData) {
-    alert("请先运行 ESS 扫描！");
-    return;
+ const d = window._essData;
+
+  // --- 逻辑 1：优先导出 ESS 谐波数据 ---
+  if (d && d.harmonicFRFs && d.harmonics) {
+    let csv = "Freq(Hz)";
+    d.harmonics.forEach(h => csv += `,H${h}(dB)`);
+    csv += "\n";
+
+    const points = d.fftSizeIR / 2;
+    // 只导出有效范围
+    for (let i = 0; i < points; i++) {
+      const f = i * d.sr / d.fftSizeIR;
+      if (f > d.sr/2) break; 
+      csv += f.toFixed(2);
+      d.harmonics.forEach(h => {
+        csv += `,${d.harmonicFRFs[h][i].toFixed(3)}`;
+      });
+      csv += "\n";
+    }
+    
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'ESS_Harmonics.csv'; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    return; // 导出成功，结束函数
+  } 
+
+  // --- 逻辑 2：其次导出标准扫频数据 ---
+  else if (typeof dataPoints !== 'undefined' && dataPoints.length > 0) {
+    let csv = 'freq_hz,amp_rms\n' + dataPoints.map(p => `${p.f.toFixed(6)},${p.amp}`).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'resonance_sweep.csv'; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    return; // 导出成功，结束函数
+  } 
+  
+  // --- 逻辑 3：无数据 ---
+  else {
+    alert("没有可导出的数据，请先运行测试。");
+  }
+};
   }
    document.querySelectorAll(".hToggle").forEach(cb => {
     cb.addEventListener("change", () => {
@@ -763,12 +804,6 @@ console.log(report);
   };
 
   // 导出 ESS 谐波响应数据到 CSV
-document.getElementById("exportCSV").addEventListener("click", () => {
-  if (!window._essData) {
-    alert("请先运行 ESS 扫描！");
-    return;
-  }
-
   const { sr, fftSizeIR, harmonics, harmonicFRFs } = window._essData;
   let csv = "Freq(Hz)";
   harmonics.forEach(h => csv += `,H${h}(dB)`);
