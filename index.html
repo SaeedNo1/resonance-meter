@@ -807,7 +807,7 @@ console.log(report);
   };
 
   // 导出 ESS 谐波响应数据到 CSV
-  const { sr, fftSizeIR, harmonics, harmonicFRFs } = window._essData;
+  const { sr, fftSizeIR, harmonics, harmonicFRFs } = d;
   let csv = "Freq(Hz)";
   harmonics.forEach(h => csv += `,H${h}(dB)`);
   csv += "\n";
