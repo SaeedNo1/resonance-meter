@@ -722,8 +722,7 @@ document.getElementById("exportCSV").addEventListener("click", () => {
   else {
     alert("没有可导出的数据，请先运行测试。");
   }
-};
-  }
+ }
    document.querySelectorAll(".hToggle").forEach(cb => {
     cb.addEventListener("change", () => {
       mediaRecorder.onstop(); // 重新触发绘图（不重新录音）
