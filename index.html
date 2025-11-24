@@ -679,7 +679,8 @@ canvas.addEventListener("mouseleave", () => {
 });
    // 导出 ESS 谐波响应数据到 CSV
 document.getElementById("exportCSV").addEventListener("click", () => {
- const d = window._essData;
+  window._essData = {};
+  const d = window._essData;
 
   // --- 逻辑 1：优先导出 ESS 谐波数据 ---
   if (d && d.harmonicFRFs && d.harmonics) {
