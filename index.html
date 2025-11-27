@@ -3,35 +3,42 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>resonance-meter</title>
-<link rel="icon" type="image/png" sizes="48x48" href="logo-42px.png">
+<title>专业共振频率扫测仪</title>
 <style>
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0f1724;color:#e6eef8;margin:0;padding:16px}
   .wrap{max-width:900px;margin:0 auto}
-  h1{font-size:20px;margin:6px 0 12px}
+  h1{font-size:20px;margin:6px 0 12px; display:flex; justify-content:space-between; align-items:center;}
   .card{background:#0b1220;border:1px solid #1f2a44;border-radius:12px;padding:12px;margin-bottom:12px}
   label{font-size:13px;color:#9fb0d6;display:block;margin-top:8px}
   input,select,button{font-size:15px;padding:8px;border-radius:8px;border:1px solid #26364f;background:#081024;color:#e6eef8;width:100%;box-sizing:border-box}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .controls{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
-  button{cursor:pointer;transition:background 0.2s}
+  .controls{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items: flex-end;}
+  button{cursor:pointer;transition:all 0.2s; font-weight:600;}
   button:hover{filter:brightness(1.1)}
-  button:disabled{opacity:0.5;cursor:not-allowed}
+  button:disabled{opacity:0.6;cursor:not-allowed;filter:grayscale(0.8);}
   button.primary{background:#3fa7ff;border:none;color:#032033}
-  canvas{width:100%;height:240px;background:#061225;border-radius:8px;border:1px solid #22314a;display:block}
+  button.stop{background:#ff4757;border:none;color:#fff;}
+  
+  /* 图表容器 */
+  .plot-container { position: relative; width: 100%; height: 300px; overflow: hidden; background:#061225; border-radius:8px; border:1px solid #22314a;}
+  canvas{display:block; width: 100%; height: 100%; cursor: crosshair;}
+  
   .pill{display:inline-block;padding:8px 12px;border-radius:999px;background:#07162b;color:#bfe0ff;margin-right:8px;font-size:13px}
-  .small{font-size:13px;color:#95b7dc}
   .hint{font-size:12px;color:#95b7dc;margin-top:8px;line-height:1.4}
   a{color:#82c1ff}
-  #hud{font-family:monospace; color:#0f0; margin-top:10px;}
-  #essReport{margin-top:10px; padding:10px; background:#111; color:#0f0; font-family:monospace; border-radius:6px; overflow-x:auto;}
-  .checkbox-group { display:flex; gap:10px; margin-top:8px; align-items:center; }
+  #hud{font-family:monospace; color:#0f0; margin-top:10px; font-size:14px;}
+  #essReport{margin-top:10px; padding:10px; background:#111; color:#0f0; font-family:monospace; border-radius:6px; overflow-x:auto; border:1px solid #333;}
+  .checkbox-group { display:flex; gap:12px; margin-top:8px; align-items:center; flex-wrap:wrap;}
   .checkbox-group label { margin:0; cursor:pointer; display:flex; align-items:center; gap:4px; color:#fff;}
+  
+  /* 专用样式 */
+  .section-title { color:#3fa7ff; font-size:14px; font-weight:bold; margin-bottom:8px; display:block; border-bottom:1px solid #1f2a44; padding-bottom:4px; }
+  .mode-select { border: 1px solid #3fa7ff; background: #0c1a30; color: #3fa7ff; font-weight: bold; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>固有频率扫测</h1>
+  <h1><span>固有频率扫测仪 Pro</span> <span style="font-size:12px;color:#666">v2.0</span></h1>
 
   <div class="card">
     <div class="row">
@@ -45,889 +52,996 @@
       </div>
     </div>
 
-    <div class="row">
-      <div>
-        <label>步数 (Step Sweep)</label>
-        <input id="steps" type="number" value="80" min="2" />
-      </div>
-      <div>
-        <label>每步时长 (ms)</label>
-        <input id="dur" type="number" value="120" min="20" />
-      </div>
-      <div>
-        <label>ESS时长 (s)</label>
-        <input id="essDur" type="number" value="10" step="1" min="1" />
-      </div>
+    <div style="background:#131e33; padding:10px; border-radius:8px; margin-top:10px;">
+        <label style="margin-top:0">算法模式</label>
+        <select id="algoMode" class="mode-select">
+            <option value="step">Discrete Step (步进扫频 - 慢速，直观)</option>
+            <option value="ess" selected>ESS (指数正弦扫 - 快速，高精度)</option>
+        </select>
+        
+        <div id="stepParams" class="row" style="margin-top:8px; display:none;">
+            <div><label>步数 (Steps)</label><input id="steps" type="number" value="80" min="2" /></div>
+            <div><label>每步时长 (ms)</label><input id="dur" type="number" value="120" min="20" /></div>
+            <div style="grid-column: span 2;">
+                <label>波形</label>
+                <select id="wave">
+                    <option value="sine">正弦波 (Sine)</option>
+                    <option value="triangle">三角波</option>
+                    <option value="square">方波</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="essParams" class="row" style="margin-top:8px;">
+            <div><label>扫频时长 (s)</label><input id="essDur" type="number" value="10" step="1" min="1" /></div>
+            <div>
+                 <label>谐波展示</label>
+                 <div class="checkbox-group" style="margin-top:12px;">
+                    <label><input type="checkbox" class="hToggle" value="1" checked> H1</label>
+                    <label><input type="checkbox" class="hToggle" value="2" checked> H2</label>
+                    <label><input type="checkbox" class="hToggle" value="3"> H3</label>
+                 </div>
+            </div>
+        </div>
     </div>
-    <label>波形 (仅步进扫频有效)</label>
-    <select id="wave">
-      <option value="sine">正弦</option>
-      <option value="triangle">三角</option>
-      <option value="sawtooth">锯齿</option>
-      <option value="square">方波</option>
-    </select>
     
-    <label>ESS 谐波展示</label>
-    <div class="checkbox-group" id="harmonicSelector">
-      <label><input type="checkbox" class="hToggle" value="1" checked> H1 (基频)</label>
-      <label><input type="checkbox" class="hToggle" value="2" checked> H2</label>
-      <label><input type="checkbox" class="hToggle" value="3" checked> H3</label>
-      <label><input type="checkbox" class="hToggle" value="4" checked> H4</label>
-    </div>
-    
-    <label>音量 (播放增益 0-1)</label>
+    <label>播放音量 (Gain 0-1)</label>
     <input id="gain" type="range" min="0" max="1" step="0.01" value="0.8" />
 
     <div class="controls">
-      <button id="startSweep" class="primary">步进扫频</button>
-      <button id="essBtn" class="primary" style="background:#b066ff;color:#fff">ESS 扫频测试</button>
-      <button id="stopSweep">停止</button>
-      <button id="baselineBtn">采集背景</button>
-      <button id="exportCSV">导出 CSV</button>
-      <button onclick="location.href='Frequency.html'">准备共振</button>
+      <button id="mainBtn" class="primary" style="flex:2;">开始测试</button>
+      <button id="stopBtn" class="stop" style="flex:1;" disabled>停止</button>
+      <button id="exportCSV" style="flex:1;">导出数据</button>
     </div>
 
     <div id="hud">
-      当前频率: <span id="hudFreq">—</span> Hz　
-      进度: <span id="hudProg">0</span>%
+      频率: <span id="hudFreq">—</span> Hz | 进度: <span id="hudProg">0</span>%
     </div>
-
+    
     <div style="margin-top:10px">
-      <span class="pill">检测峰值：<span id="peakFreq">—</span> Hz</span>
+      <span class="pill">峰值频率：<span id="peakFreq">—</span> Hz</span>
       <span class="pill">峰值幅度：<span id="peakAmp">—</span></span>
     </div>
+
     <div class="hint">
-      ESS (指数正弦扫) 是一种高精度的音频测量方法。它能同时分离系统的线性响应和非线性谐波失真。
-      <br>注意：请将麦克风靠近被测物体，并保持环境安静。
+      提示：鼠标滚轮可缩放图表，拖拽可移动视图。双击图表复位。
     </div>
-    <a href="introduce/ESS.html">关于指数正弦扫(ESS)</a>
   </div>
 
   <div class="card">
-    <canvas id="plot" width="800" height="320"></canvas>
+    <span class="section-title">频响曲线 (Frequency Response)</span>
+    <div class="plot-container">
+        <canvas id="plot"></canvas>
+    </div>
   </div>
   
-  <div id="essReport">
+  <div id="essReport" style="display:none;">
     <b>分析报告：</b>
-    <pre id="essReportText">（等待 ESS 扫描结果...）</pre>
+    <pre id="essReportText">...</pre>
   </div>
 
-  <div style="padding:8px; margin-top:8px;">
-    <h3>脉冲/敲击检测</h3>
-    <div class="controls">
-      <button id="tapDetectBtn">敲击检测 (录音 2s)</button>
-      <label style="display:inline-flex;align-items:center;width:auto;margin:0;">
-        <input type="checkbox" id="enableHPF" style="width:auto;margin-right:4px;"> 高通滤波
+  <div class="card">
+    <span class="section-title">脉冲/敲击检测 (Impulse Detection)</span>
+    <div class="controls" style="margin-top:0; margin-bottom:8px;">
+      <button id="tapDetectBtn" style="width:auto;">开始敲击录音 (2s)</button>
+      <label style="display:inline-flex;align-items:center;margin:0 0 0 10px;">
+        <input type="checkbox" id="enableHPF" checked style="width:auto;margin-right:4px;"> 高通滤波 (>50Hz)
       </label>
-      <input type="number" id="hpfValue" value="50" min="0" max="500" style="width:70px;margin-left:4px;"> Hz
-      <a id="downloadTap" style="display:none;align-self:center;" href="#">下载录音 (WAV)</a>
+      <a id="downloadTap" style="display:none; margin-left:auto; line-height:36px;" href="#">下载录音</a>
     </div>
-    <div style="margin-top:8px;">
-      <span class="pill">敲击基频: <span id="tapFreq">—</span> Hz</span>
+    <div style="margin-bottom:8px;">
+        <span class="pill">基频估算: <span id="tapFreq">—</span> Hz</span>
     </div>
-    <canvas id="tapWave" width="600" height="120" style="margin-top:8px;border-radius:6px;background:#061225;width:100%"></canvas>
+    <div class="plot-container" style="height:150px;">
+        <canvas id="tapWave"></canvas>
+    </div>
   </div>
 </div>
 
-<script src="JS/fft.js"></script>
 <script>
-// ==================== 全局工具与状态 ====================
+// ==================== 0. 内嵌 MiniFFT 库 ====================
+// 一个自包含的 Radix-2 FFT 实现，用于替代缺失的外部库
+class MiniFFT {
+    constructor(size) {
+        this.size = size;
+        this.levels = Math.log2(size);
+        if (Math.pow(2, this.levels) !== size) throw "FFT size must be power of 2";
+        this.cosTable = new Float32Array(size / 2);
+        this.sinTable = new Float32Array(size / 2);
+        for (let i = 0; i < size / 2; i++) {
+            this.cosTable[i] = Math.cos(2 * Math.PI * i / size);
+            this.sinTable[i] = Math.sin(2 * Math.PI * i / size);
+        }
+        this.reverseTable = new Uint32Array(size);
+        for (let i = 0; i < size; i++) {
+            let rev = 0;
+            for (let j = 0; j < this.levels; j++) {
+                if ((i >> j) & 1) rev |= (1 << (this.levels - 1 - j));
+            }
+            this.reverseTable[i] = rev;
+        }
+    }
+
+    // 创建复数数组 [re, im, re, im...]
+    createComplexArray() { return new Float32Array(this.size * 2); }
+
+    // 实数转复数 FFT
+    realTransform(out, input) {
+        for (let i = 0; i < this.size; i++) {
+            out[2 * i] = input[i];
+            out[2 * i + 1] = 0;
+        }
+        this.transform(out, false);
+    }
+
+    // 复数逆变换
+    inverseTransform(outReal, inputComplex) {
+        this.transform(inputComplex, true);
+        for (let i = 0; i < this.size; i++) {
+            outReal[i] = inputComplex[2 * i]; // 已经缩放
+        }
+    }
+
+    transform(data, inverse) {
+        const n = this.size;
+        // Bit-reverse copy
+        for (let i = 0; i < n; i++) {
+            const rev = this.reverseTable[i];
+            if (i < rev) {
+                let tr = data[2 * i], ti = data[2 * i + 1];
+                data[2 * i] = data[2 * rev]; data[2 * i + 1] = data[2 * rev + 1];
+                data[2 * rev] = tr; data[2 * rev + 1] = ti;
+            }
+        }
+
+        // Cooley-Tukey
+        for (let size = 2; size <= n; size *= 2) {
+            const halfsize = size / 2;
+            const tablestep = n / size;
+            for (let i = 0; i < n; i += size) {
+                for (let j = 0, k = 0; j < halfsize; j++, k += tablestep) {
+                    const idx1 = 2 * (i + j);
+                    const idx2 = 2 * (i + j + halfsize);
+                    const tpre = data[idx2];
+                    const tpim = data[idx2 + 1];
+                    
+                    // Trigonometric values
+                    let cost = this.cosTable[k];
+                    let sint = this.sinTable[k];
+                    if (inverse) sint = -sint;
+
+                    const re = tpre * cost - tpim * sint;
+                    const im = tpre * sint + tpim * cost;
+
+                    data[idx2] = data[idx1] - re;
+                    data[idx2 + 1] = data[idx1 + 1] - im;
+                    data[idx1] += re;
+                    data[idx1 + 1] += im;
+                }
+            }
+        }
+        
+        // Normalize for inverse
+        if (inverse) {
+            const f = 1.0 / n;
+            for (let i = 0; i < 2 * n; i++) data[i] *= f;
+        }
+    }
+}
+
+// ==================== 1. 全局状态与工具 ====================
 const $ = id => document.getElementById(id);
 let audioCtx = null;
-let currentOsc = null;      // 用于步进扫频
-let currentEssSrc = null;   // 用于 ESS 播放源
-let isRunning = false;
-let globalEssData = null;   // 存储最新的 ESS 分析结果
-let globalStepData = null;  // 存储最新的步进扫频结果
 let micStream = null;
-
-// 获取或初始化 AudioContext
-function getAudioCtx() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
-  }
-  return audioCtx;
-}
-
-// 停止所有音频活动
-async function stopAll() {
-  isRunning = false;
-  if (currentOsc) {
-    try { currentOsc.stop(); currentOsc.disconnect(); } catch(e){}
-    currentOsc = null;
-  }
-  if (currentEssSrc) {
-    try { currentEssSrc.stop(); currentEssSrc.disconnect(); } catch(e){}
-    currentEssSrc = null;
-  }
-  if (micStream) {
-    micStream.getTracks().forEach(t => t.stop());
-    micStream = null;
-  }
-  if (audioCtx && audioCtx.state !== 'closed') {
-    try { await audioCtx.suspend(); } catch(e){}
-  }
-  $('hudFreq').textContent = '—';
-  $('hudProg').textContent = '0';
-}
-
-// 辅助：休眠
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-// 辅助：RMS 计算
-function getRMS(buf) {
-  let sum = 0;
-  for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-  return Math.sqrt(sum / buf.length);
-}
-
-// 辅助：创建高通滤波器
-function createHPF(ctx, freq) {
-  const hpf = ctx.createBiquadFilter();
-  hpf.type = 'highpass';
-  hpf.frequency.value = freq;
-  return hpf;
-}
-
-// ==================== 1. 步进扫频 (Discrete Sweep) ====================
-async function runStepSweep() {
-  if (isRunning) return;
-  const ctx = getAudioCtx();
-  await ctx.resume();
-  isRunning = true;
-  globalStepData = []; // 清空数据
-  
-  // 参数获取
-  const fStart = parseFloat($('fStart').value) || 50;
-  const fEnd = parseFloat($('fEnd').value) || 2000;
-  let steps = parseInt($('steps').value) || 80;
-  const dur = parseFloat($('dur').value) || 120;
-  const waveType = $('wave').value;
-  const gainVal = parseFloat($('gain').value);
-
-  // 麦克风设置
-  let analyser;
-  try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: { 
-      echoCancellation: false, noiseSuppression: false, autoGainControl: false 
-    }});
-    const micSrc = ctx.createMediaStreamSource(micStream);
-    analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    micSrc.connect(analyser);
-  } catch (e) {
-    alert("麦克风启动失败: " + e.message);
-    isRunning = false;
-    return;
-  }
-
-  // 输出设置
-  const gainNode = ctx.createGain();
-  gainNode.gain.value = gainVal;
-  gainNode.connect(ctx.destination);
-
-  // 绘图准备
-  const plotCanvas = $('plot');
-  const g = plotCanvas.getContext('2d');
-  
-  // 频率序列 (对数分布)
-  const freqs = [];
-  for (let i = 0; i < steps; i++) {
-    const t = i / (steps - 1);
-    freqs.push(fStart * Math.pow(fEnd / fStart, t));
-  }
-
-  // 扫描循环
-  const timeData = new Float32Array(analyser.fftSize);
-  for (let i = 0; i < freqs.length; i++) {
-    if (!isRunning) break;
-    const f = freqs[i];
-
-    // 更新 HUD
-    $('hudFreq').textContent = f.toFixed(1);
-    $('hudProg').textContent = Math.round((i / steps) * 100);
-
-    // 播放单音
-    currentOsc = ctx.createOscillator();
-    currentOsc.type = waveType;
-    currentOsc.frequency.setValueAtTime(f, ctx.currentTime);
-    currentOsc.connect(gainNode);
-    currentOsc.start();
-
-    // 等待稳定
-    const stableMs = Math.max(10, dur * 0.5);
-    await sleep(stableMs);
-
-    // 采样
-    let rmsSum = 0;
-    let count = 0;
-    const measureEnd = performance.now() + (dur - stableMs);
-    while (performance.now() < measureEnd) {
-      analyser.getFloatTimeDomainData(timeData);
-      rmsSum += getRMS(timeData);
-      count++;
-      await sleep(5);
-    }
-    
-    // 记录
-    const amp = count > 0 ? rmsSum / count : 0;
-    globalStepData.push({ f, amp });
-    
-    // 停止单音
-    currentOsc.stop();
-    currentOsc.disconnect();
-    currentOsc = null;
-
-    // 实时绘图
-    drawStepPlot(g, globalStepData, fStart, fEnd);
-    
-    // 短暂间隔
-    await sleep(10);
-  }
-
-  // 结束处理
-  isRunning = false;
-  micStream.getTracks().forEach(t => t.stop());
-  micStream = null;
-  
-  // 找峰值
-  if (globalStepData.length > 0) {
-    const peak = globalStepData.reduce((a, b) => b.amp > a.amp ? b : a);
-    $('peakFreq').textContent = peak.f.toFixed(1);
-    $('peakAmp').textContent = peak.amp.toFixed(4);
-  }
-}
-
-function drawStepPlot(ctx, data, fMin, fMax) {
-  const w = ctx.canvas.width;
-  const h = ctx.canvas.height;
-  ctx.fillStyle = "#061225";
-  ctx.fillRect(0, 0, w, h);
-  
-  if (data.length === 0) return;
-
-  // 绘制网格
-  drawGrid(ctx, fMin, fMax);
-
-  // 绘制数据
-  const maxAmp = Math.max(...data.map(p => p.amp), 0.0001);
-  ctx.beginPath();
-  ctx.strokeStyle = "#3fa7ff";
-  ctx.lineWidth = 2;
-  
-  const logMin = Math.log10(fMin);
-  const logMax = Math.log10(fMax);
-  const scaleX = w / (logMax - logMin);
-
-  for (let i = 0; i < data.length; i++) {
-    const p = data[i];
-    const x = (Math.log10(p.f) - logMin) * scaleX;
-    const y = h - (p.amp / maxAmp) * (h - 20) - 10;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-}
-
-
-// ==================== 2. ESS (指数正弦扫) 核心逻辑 ====================
-
-// 生成 ESS 信号与逆滤波器
-function generateESSVectors(f1, f2, duration, sampleRate) {
-  const N = Math.floor(duration * sampleRate);
-  const w1 = 2 * Math.PI * f1;
-  const w2 = 2 * Math.PI * f2;
-  const L = (duration * w1) / Math.log(w2 / w1); // 变换系数
-  const K = Math.log(w2 / w1) / duration;        // 指数率
-  
-  const sweep = new Float32Array(N);
-  const inverse = new Float32Array(N);
-  
-  // 生成 Log Sweep
-  // x(t) = sin[ L * (exp(t*K) - 1) ]
-  for (let n = 0; n < N; n++) {
-    const t = n / sampleRate;
-    const phase = L * (Math.exp(t * K) - 1);
-    sweep[n] = Math.sin(phase);
-  }
-
-  // 生成 Inverse Filter
-  // 逆滤波器是时间反转的扫频信号，并按频率进行幅度调制(由 -6dB/oct 变为 0dB/oct 对应白化)
-  // 幅度包络 m(t) = w1 / w(t) = exp(-t*K)
-  for (let n = 0; n < N; n++) {
-    const t = n / sampleRate;
-    const invT = (N - 1 - n) / sampleRate; // 时间反转索引对应的时间
-    
-    // 生成反转信号的相位 (同 sweep 但时间倒置)
-    // 实际上直接用 sweep[N-1-n] 乘以包络即可
-    const modulation = Math.exp(-t * K); 
-    // inverse[n] = sweep[N - 1 - n] * modulation; 
-    // 注意: 为了完全反卷积，包络需要应用于反转后的时间轴
-    inverse[n] = sweep[N - 1 - n] * Math.exp(- (N - 1 - n) / sampleRate * K);
-  }
-
-  // 归一化 inverse 以避免增益过大
-  const maxVal = inverse.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
-  for (let i=0; i<N; i++) inverse[i] /= maxVal;
-
-  return { sweep, inverse };
-}
-
-// 快速卷积/反卷积 (Frequency Domain)
-// 要求 fft.js 已加载
-function convolve(signal, filter) {
-  if (typeof FFT === 'undefined') throw new Error("FFT库未加载");
-  
-  const nSig = signal.length;
-  const nFilt = filter.length;
-  // 卷积结果长度为 M+N-1，FFT需要为2的幂次
-  let len = nSig + nFilt - 1;
-  let fftSize = 1;
-  while (fftSize < len) fftSize *= 2;
-
-  const fft = new FFT(fftSize);
-  const sigPad = new Float32Array(fftSize);
-  const filtPad = new Float32Array(fftSize);
-  
-  sigPad.set(signal);
-  filtPad.set(filter);
-
-  const sigComplex = fft.createComplexArray();
-  const filtComplex = fft.createComplexArray();
-  const resComplex = fft.createComplexArray();
-
-  fft.realTransform(sigComplex, sigPad);
-  fft.realTransform(filtComplex, filtPad);
-
-  // 复数乘法: Res = Sig * Filt
-  for (let i = 0; i < fftSize; i++) {
-    const reS = sigComplex[2*i];
-    const imS = sigComplex[2*i+1];
-    const reF = filtComplex[2*i];
-    const imF = filtComplex[2*i+1];
-    
-    resComplex[2*i]   = reS * reF - imS * imF;
-    resComplex[2*i+1] = reS * imF + imS * reF;
-  }
-
-  const result = new Float32Array(fftSize);
-  fft.inverseTransform(result, resComplex);
-  
-  // 仅返回有效部分，且做归一化
-  return result; // 此时未缩放，IFFT通常不需要额外除N(取决于库实现)，fft.js需要看文档，通常它不除。
-  // 我们后续处理归一化，所以这里只要相对形状对即可。
-}
-
-async function runESS() {
-  if (isRunning) return;
-  const ctx = getAudioCtx();
-  await ctx.resume();
-  isRunning = true;
-  globalEssData = null;
-  $('essReportText').textContent = "正在生成 ESS 信号...";
-  $('peakFreq').textContent = "—";
-  
-  // 1. 获取参数
-  const fStart = parseFloat($('fStart').value) || 50;
-  const fEnd = parseFloat($('fEnd').value) || 2000;
-  const dur = parseFloat($('essDur').value) || 10;
-  const gainVal = parseFloat($('gain').value);
-  const sampleRate = ctx.sampleRate;
-
-  // 2. 生成信号
-  const { sweep, inverse } = generateESSVectors(fStart, fEnd, dur, sampleRate);
-
-  // 3. 准备播放与录音
-  const sweepBuf = ctx.createBuffer(1, sweep.length, sampleRate);
-  sweepBuf.copyToChannel(sweep, 0);
-
-  let recorder;
-  let inputChunks = [];
-  
-  try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: { 
-      echoCancellation: false, noiseSuppression: false, autoGainControl: false 
-    }});
-  } catch(e) {
-    alert("麦克风错误: " + e.message);
-    isRunning = false;
-    return;
-  }
-
-  // 使用 MediaRecorder 录制
-  // 注意：MediaRecorder 有一定启动延迟，我们先启动录制，稍等再播放
-  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
-  recorder = new MediaRecorder(micStream, { mimeType });
-  recorder.ondataavailable = e => inputChunks.push(e.data);
-
-  recorder.start();
-  $('essReportText').textContent = "正在录制响应...";
-  
-  // 延迟 200ms 确保录音机启动
-  await sleep(200);
-
-  // 播放
-  const src = ctx.createBufferSource();
-  src.buffer = sweepBuf;
-  const gainNode = ctx.createGain();
-  gainNode.gain.value = gainVal;
-  src.connect(gainNode);
-  gainNode.connect(ctx.destination);
-  
-  currentEssSrc = src;
-  src.start();
-  
-  const startTime = ctx.currentTime;
-  
-  // HUD 动画
-  const hudInterval = setInterval(() => {
-    if (!isRunning) { clearInterval(hudInterval); return; }
-    const elapsed = ctx.currentTime - startTime;
-    let prog = (elapsed / dur) * 100;
-    if (prog > 100) prog = 100;
-    $('hudProg').textContent = prog.toFixed(0);
-    
-    if (elapsed <= dur) {
-      // 瞬时频率计算 f(t) = f1 * (f2/f1)^(t/T)
-      const instF = fStart * Math.pow(fEnd/fStart, elapsed/dur);
-      $('hudFreq').textContent = instF.toFixed(1);
-    }
-  }, 100);
-
-  // 等待播放结束 + 混响拖尾 (1s)
-  await sleep(dur * 1000 + 1000);
-  
-  clearInterval(hudInterval);
-  src.stop();
-  recorder.stop();
-  currentEssSrc = null;
-
-  $('essReportText').textContent = "正在处理卷积与分析...";
-
-  // 等待录音数据完成
-  await new Promise(resolve => recorder.onstop = resolve);
-  micStream.getTracks().forEach(t => t.stop());
-  micStream = null;
-
-  if (!isRunning) return; // 如果中途被停止
-
-  // 4. 处理录音数据
-  const blob = new Blob(inputChunks, { type: mimeType });
-  const arrayBuffer = await blob.arrayBuffer();
-  const audioBuf = await ctx.decodeAudioData(arrayBuffer);
-  const recordedSignal = audioBuf.getChannelData(0);
-
-  // 5. 卷积 (得到脉冲响应 IR)
-  // 为了得到正确的 IR，我们将录制信号与逆滤波器卷积
-  // 注意：MediaRecorder 和 播放 之间的延迟是未知的，
-  // 所以得到的 IR 会有一个未知的整体时移。我们需要找到主峰。
-  let ir;
-  try {
-    ir = convolve(recordedSignal, inverse);
-  } catch (e) {
-    alert("卷积计算失败: " + e.message);
-    isRunning = false;
-    return;
-  }
-
-  // 6. 谐波分离与分析
-  analyzeHarmonics(ir, sampleRate, fStart, fEnd, dur);
-  
-  isRunning = false;
-}
-
-// 分析谐波并绘图
-function analyzeHarmonics(ir, sr, f1, f2, dur) {
-  // 找到 IR 中的最大绝对值位置 (作为 H1 的参考点)
-  // 在 ESS 中，线性响应(H1)通常在 IR 的尾部（如果是循环卷积）或者根据延迟出现在某处
-  // 由于我们录音比播放长，且是线性卷积，H1 应该是最强的峰
-  let maxVal = -1;
-  let maxIdx = 0;
-  for(let i=0; i<ir.length; i++) {
-    if (Math.abs(ir[i]) > maxVal) {
-      maxVal = Math.abs(ir[i]);
-      maxIdx = i;
-    }
-  }
-
-  // 计算各谐波相对于 H1 的理论时间提前量
-  // Delta_t = T * ln(h) / ln(f2/f1)
-  // IR 序列中，H1 在 maxIdx 处。H2 应当出现在 maxIdx - Delta_t2 处，以此类推。
-  
-  const harmonics = [1, 2, 3, 4];
-  const results = {}; // 存储频谱数据 { 1: {freqs, amps}, ... }
-  const fftSize = 4096; // 分析窗口大小
-  const fft = new FFT(fftSize);
-
-  const freqLogBase = Math.log(f2/f1);
-
-  harmonics.forEach(h => {
-    // 计算时移 (samples)
-    const dt = dur * Math.log(h) / freqLogBase;
-    const shiftSamples = Math.round(dt * sr);
-    
-    // 提取中心位置
-    const centerIdx = maxIdx - shiftSamples;
-    
-    // 截取窗口 (加 Hann 窗)
-    const segment = new Float32Array(fftSize);
-    if (centerIdx - fftSize/2 >= 0 && centerIdx + fftSize/2 < ir.length) {
-      for (let i = 0; i < fftSize; i++) {
-        const idx = centerIdx - fftSize/2 + i;
-        // Hann window
-        const win = 0.5 * (1 - Math.cos(2 * Math.PI * i / (fftSize - 1)));
-        segment[i] = ir[idx] * win;
-      }
-    }
-
-    // FFT
-    const outComplex = fft.createComplexArray();
-    fft.realTransform(outComplex, segment);
-    
-    // 计算幅度谱 (dB)
-    const amps = [];
-    const freqs = [];
-    for (let i = 0; i < fftSize/2; i++) {
-      const re = outComplex[2*i];
-      const im = outComplex[2*i+1];
-      const mag = Math.sqrt(re*re + im*im);
-      const db = 20 * Math.log10(mag + 1e-9);
-      amps.push(db);
-      freqs.push(i * sr / fftSize);
-    }
-    results[h] = { freqs, amps };
-  });
-
-  // 保存全局数据以便导出
-  globalEssData = { results, f1, f2, harmonics };
-
-  // 绘图
-  drawESSPlot(results, f1, f2);
-  
-  // 生成报告
-  generateReport(results, f1, f2);
-}
-
-function drawESSPlot(results, fMin, fMax) {
-  const canvas = $('plot');
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width;
-  const h = canvas.height;
-  
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = "#061225";
-  ctx.fillRect(0, 0, w, h);
-
-  drawGrid(ctx, fMin, fMax);
-
-  // 获取显示的谐波
-  const visibleHarmonics = Array.from(document.querySelectorAll('.hToggle'))
-    .filter(c => c.checked).map(c => parseInt(c.value));
-  
-  // 自动缩放 Y 轴
-  let maxDb = -100;
-  visibleHarmonics.forEach(k => {
-    if(results[k]) maxDb = Math.max(maxDb, ...results[k].amps);
-  });
-  const topDb = Math.ceil(maxDb / 10) * 10 + 10;
-  const bottomDb = topDb - 80; // 显示 80dB 范围
-
-  const colors = {1: '#3fa7ff', 2: '#ffcf6b', 3: '#ff6b6b', 4: '#6bff8e'};
-
-  const logMin = Math.log10(fMin);
-  const logMax = Math.log10(fMax);
-  const scaleX = w / (logMax - logMin);
-
-  visibleHarmonics.forEach(k => {
-    if (!results[k]) return;
-    const { freqs, amps } = results[k];
-    
-    ctx.beginPath();
-    ctx.strokeStyle = colors[k] || '#fff';
-    ctx.lineWidth = k === 1 ? 2 : 1;
-    
-    let started = false;
-    for (let i = 0; i < freqs.length; i++) {
-      const f = freqs[i];
-      if (f < fMin || f > fMax) continue;
-      
-      const x = (Math.log10(f) - logMin) * scaleX;
-      const y = h - ((amps[i] - bottomDb) / (topDb - bottomDb)) * h;
-      
-      if (!started) { ctx.moveTo(x, y); started = true; }
-      else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  });
-
-  // 图例
-  let lx = 60;
-  visibleHarmonics.forEach(k => {
-    ctx.fillStyle = colors[k];
-    ctx.font = "12px sans-serif";
-    ctx.fillText(`H${k}`, lx, 20);
-    lx += 40;
-  });
-}
-
-function drawGrid(ctx, fMin, fMax) {
-  const w = ctx.canvas.width;
-  const h = ctx.canvas.height;
-  const logMin = Math.log10(fMin);
-  const logMax = Math.log10(fMax);
-  const scaleX = w / (logMax - logMin);
-
-  ctx.strokeStyle = "#1f2a44";
-  ctx.lineWidth = 1;
-  ctx.fillStyle = "#5c6b8f";
-  ctx.font = "10px sans-serif";
-
-  // 频率网格 (10, 100, 1000...)
-  for (let exp = 1; exp < 5; exp++) {
-    const base = Math.pow(10, exp);
-    [1, 2, 5].forEach(mult => {
-      const f = base * mult;
-      if (f >= fMin && f <= fMax) {
-        const x = (Math.log10(f) - logMin) * scaleX;
-        ctx.beginPath();
-        ctx.moveTo(x, 0); ctx.lineTo(x, h);
-        ctx.stroke();
-        ctx.fillText(f >= 1000 ? (f/1000)+'k' : f, x+2, h-6);
-      }
-    });
-  }
-}
-
-function generateReport(results, f1, f2) {
-  if (!results[1]) return;
-  const h1 = results[1];
-  
-  // 找峰值频率
-  let peakVal = -999;
-  let peakF = 0;
-  for(let i=0; i<h1.amps.length; i++) {
-    if(h1.freqs[i] >= f1 && h1.freqs[i] <= f2) {
-      if(h1.amps[i] > peakVal) {
-        peakVal = h1.amps[i];
-        peakF = h1.freqs[i];
-      }
-    }
-  }
-
-  $('peakFreq').textContent = peakF.toFixed(1);
-  $('peakAmp').textContent = peakVal.toFixed(1) + " dB";
-
-  let txt = `=== ESS 分析报告 ===\n`;
-  txt += `频率范围: ${f1}Hz - ${f2}Hz\n`;
-  txt += `主响应峰值 (H1): ${peakF.toFixed(1)} Hz @ ${peakVal.toFixed(1)} dB\n`;
-  
-  [2, 3, 4].forEach(k => {
-    if (results[k]) {
-      // 计算该谐波在主峰频率处的幅度（近似）
-      // 实际上谐波失真通常看 THD，这里简单列出该频率下的值
-      // 为了简单，我们找出该谐波曲线的最高点
-      let hPeak = -999;
-      results[k].amps.forEach(a => hPeak = Math.max(hPeak, a));
-      txt += `H${k} 最大失真: ${hPeak.toFixed(1)} dB (相对H1: ${(hPeak - peakVal).toFixed(1)} dB)\n`;
-    }
-  });
-  
-  $('essReportText').textContent = txt;
-}
-
-// ==================== 3. 敲击检测与辅助功能 ====================
-
-$('tapDetectBtn').addEventListener('click', async function() {
-  const btn = this;
-  btn.disabled = true;
-  btn.textContent = "录音中...";
-  const ctx = getAudioCtx();
-  await ctx.resume();
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const rec = new MediaRecorder(stream);
-    const chunks = [];
-    rec.ondataavailable = e => chunks.push(e.data);
-    rec.start();
-    
-    await sleep(2000);
-    rec.stop();
-    await new Promise(r => rec.onstop = r);
-    stream.getTracks().forEach(t => t.stop());
-
-    const blob = new Blob(chunks, { type: 'audio/webm' });
-    const buf = await blob.arrayBuffer();
-    const audioB = await ctx.decodeAudioData(buf);
-    let data = audioB.getChannelData(0);
-
-    // 高通滤波处理 (如果勾选)
-    if ($('enableHPF').checked) {
-      const hpfFreq = parseFloat($('hpfValue').value) || 50;
-      // 离线处理滤波
-      const offlineCtx = new OfflineAudioContext(1, data.length, audioB.sampleRate);
-      const src = offlineCtx.createBufferSource();
-      src.buffer = audioB;
-      const hpf = offlineCtx.createBiquadFilter();
-      hpf.type = 'highpass';
-      hpf.frequency.value = hpfFreq;
-      src.connect(hpf);
-      hpf.connect(offlineCtx.destination);
-      src.start();
-      const rendered = await offlineCtx.startRendering();
-      data = rendered.getChannelData(0);
-    }
-
-    drawWaveform(data, $('tapWave'));
-    
-    // 简单自相关基频检测
-    const pitch = detectPitch(data, audioB.sampleRate);
-    $('tapFreq').textContent = pitch ? pitch.toFixed(1) : "未检测到";
-
-    // 下载链接
-    const wavBlob = audioBufferToWav(data, audioB.sampleRate);
-    const url = URL.createObjectURL(wavBlob);
-    const dl = $('downloadTap');
-    dl.href = url;
-    dl.download = 'tap_impulse.wav';
-    dl.style.display = 'inline-block';
-    
-  } catch(e) {
-    alert("敲击检测失败: " + e.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "敲击检测 (录音 2s)";
-  }
-});
-
-function drawWaveform(data, canvas) {
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width;
-  const h = canvas.height;
-  ctx.clearRect(0,0,w,h);
-  ctx.fillStyle = '#061225';
-  ctx.fillRect(0,0,w,h);
-  ctx.strokeStyle = '#5fc0ff';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  
-  const step = Math.ceil(data.length / w);
-  const amp = h / 2;
-  
-  for(let i=0; i < w; i++) {
-    const idx = i * step;
-    if(idx >= data.length) break;
-    const v = data[idx];
-    const y = h/2 + v * amp;
-    if(i===0) ctx.moveTo(i, y);
-    else ctx.lineTo(i, y);
-  }
-  ctx.stroke();
-}
-
-function detectPitch(buffer, sampleRate) {
-  // 自相关法简易实现
-  const n = 1024;
-  let bestR = 0;
-  let bestK = -1;
-  
-  // 找 RMS 最大的区域
-  let maxRms = 0, startIdx = 0;
-  for(let i=0; i<buffer.length - n; i+=500) {
-    let sum=0;
-    for(let j=0; j<n; j++) sum += buffer[i+j]*buffer[i+j];
-    if(sum > maxRms) { maxRms = sum; startIdx = i; }
-  }
-  const slice = buffer.slice(startIdx, startIdx + n);
-
-  for(let k = 20; k < n/2; k++) {
-    let sum = 0;
-    for(let i=0; i < n - k; i++) {
-      sum += slice[i] * slice[i+k];
-    }
-    if(sum > bestR) { bestR = sum; bestK = k; }
-  }
-  
-  if(bestK > 0) return sampleRate / bestK;
-  return null;
-}
-
-// 简单的 WAV 导出工具
-function audioBufferToWav(float32Array, sampleRate) {
-  const buffer = new ArrayBuffer(44 + float32Array.length * 2);
-  const view = new DataView(buffer);
-  const writeString = (view, offset, string) => {
-    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
-  };
-  writeString(view, 0, 'RIFF');
-  view.setUint32(4, 36 + float32Array.length * 2, true);
-  writeString(view, 8, 'WAVE');
-  writeString(view, 12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeString(view, 36, 'data');
-  view.setUint32(40, float32Array.length * 2, true);
-  for (let i = 0; i < float32Array.length; i++) {
-    let s = Math.max(-1, Math.min(1, float32Array[i]));
-    view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-  }
-  return new Blob([view], { type: 'audio/wav' });
-}
-
-// ==================== UI 绑定 ====================
-
-$('startSweep').onclick = runStepSweep;
-$('essBtn').onclick = runESS;
-$('stopSweep').onclick = stopAll;
-
-$('exportCSV').onclick = () => {
-  if (globalEssData) {
-    // 导出 ESS 数据
-    let csv = "Frequency(Hz),H1(dB),H2(dB),H3(dB),H4(dB)\n";
-    const h1 = globalEssData.results[1];
-    if(!h1) return;
-    for(let i=0; i<h1.freqs.length; i++) {
-      const f = h1.freqs[i];
-      if(f > globalEssData.f2) break;
-      let row = `${f.toFixed(2)},${h1.amps[i].toFixed(2)}`;
-      [2,3,4].forEach(k => {
-        row += `,${globalEssData.results[k] ? globalEssData.results[k].amps[i].toFixed(2) : ''}`;
-      });
-      csv += row + "\n";
-    }
-    downloadCSV(csv, "ess_data.csv");
-  } else if (globalStepData) {
-    // 导出步进数据
-    let csv = "Frequency(Hz),Amplitude\n";
-    globalStepData.forEach(p => csv += `${p.f.toFixed(2)},${p.amp.toFixed(6)}\n`);
-    downloadCSV(csv, "step_sweep.csv");
-  } else {
-    alert("暂无数据可导出");
-  }
+let currentOsc = null;
+let currentSource = null;
+let isRunning = false;
+let abortController = null; // 用于取消异步操作
+
+// 数据存储
+let globalData = {
+    type: null, // 'step' or 'ess'
+    stepData: [],
+    essResults: null,
+    fStart: 0,
+    fEnd: 0
+};
+let tapDataRaw = null; // 敲击波形数据
+
+// 图表视图状态 (用于缩放和平移)
+const chartView = {
+    freq: { min: 0, max: 0 }, // 当前显示的频率范围
+    db: { min: -100, max: 0 },
+    isDragging: false,
+    lastX: 0
+};
+const tapView = {
+    offset: 0,
+    zoom: 1, // 1 = fit all
+    isDragging: false,
+    lastX: 0
 };
 
-function downloadCSV(content, filename) {
-  const blob = new Blob([content], {type: 'text/csv'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+// 工具函数
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function getRMS(buf) {
+    let s = 0; for(let x of buf) s += x*x; return Math.sqrt(s/buf.length);
+}
+function getAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
 }
 
-// 监听复选框重绘
-document.querySelectorAll('.hToggle').forEach(el => {
-  el.addEventListener('change', () => {
-    if (globalEssData) drawESSPlot(globalEssData.results, globalEssData.f1, globalEssData.f2);
-  });
+// ==================== 2. UI 逻辑与交互 ====================
+
+// 模式切换
+$('algoMode').addEventListener('change', (e) => {
+    const mode = e.target.value;
+    $('stepParams').style.display = mode === 'step' ? 'grid' : 'none';
+    $('essParams').style.display = mode === 'ess' ? 'grid' : 'none';
 });
 
-// 页面隐藏时清理
-window.addEventListener('pagehide', stopAll);
+// 按钮控制
+$('mainBtn').addEventListener('click', async () => {
+    if (isRunning) return;
+    const mode = $('algoMode').value;
+    
+    // UI 状态
+    setRunningUI(true);
+    
+    try {
+        if (mode === 'step') await runStepSweep();
+        else await runESS();
+    } catch (e) {
+        if (e.message !== 'Aborted') alert("错误: " + e.message);
+    } finally {
+        setRunningUI(false);
+    }
+});
+
+$('stopBtn').addEventListener('click', () => {
+    isRunning = false;
+    if (currentOsc) { try{currentOsc.stop();}catch(e){} currentOsc = null; }
+    if (currentSource) { try{currentSource.stop();}catch(e){} currentSource = null; }
+    if (micStream) { micStream.getTracks().forEach(t=>t.stop()); micStream = null; }
+    setRunningUI(false);
+});
+
+function setRunningUI(active) {
+    isRunning = active;
+    $('mainBtn').disabled = active;
+    $('stopBtn').disabled = !active;
+    $('algoMode').disabled = active;
+    
+    if (active) {
+        let sec = 0;
+        $('mainBtn').dataset.timer = setInterval(() => {
+            sec += 0.1;
+            $('mainBtn').textContent = `运行中 (${sec.toFixed(1)}s)`;
+        }, 100);
+    } else {
+        clearInterval($('mainBtn').dataset.timer);
+        $('mainBtn').textContent = "开始测试";
+        $('hudFreq').textContent = "—";
+    }
+}
+
+// ==================== 3. 算法核心：Step Sweep ====================
+async function runStepSweep() {
+    const ctx = getAudioCtx();
+    await ctx.resume();
+    
+    const fStart = parseFloat($('fStart').value);
+    const fEnd = parseFloat($('fEnd').value);
+    const steps = parseInt($('steps').value);
+    const dur = parseFloat($('dur').value);
+    const wave = $('wave').value;
+    const gainVal = parseFloat($('gain').value);
+
+    // 重置数据
+    globalData.type = 'step';
+    globalData.stepData = [];
+    globalData.fStart = fStart;
+    globalData.fEnd = fEnd;
+    resetChartView(fStart, fEnd); // 重置视图
+
+    // 麦克风
+    micStream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
+    const micSrc = ctx.createMediaStreamSource(micStream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    micSrc.connect(analyser);
+    const timeData = new Float32Array(analyser.fftSize);
+
+    // 输出
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = gainVal;
+    gainNode.connect(ctx.destination);
+
+    // 生成频率表 (对数分布)
+    const freqs = [];
+    for(let i=0; i<steps; i++) freqs.push(fStart * Math.pow(fEnd/fStart, i/(steps-1)));
+
+    for(let i=0; i<freqs.length; i++) {
+        if(!isRunning) break;
+        const f = freqs[i];
+        
+        // HUD
+        $('hudFreq').textContent = f.toFixed(1);
+        $('hudProg').textContent = Math.round(i/steps*100);
+
+        // 发声
+        currentOsc = ctx.createOscillator();
+        currentOsc.type = wave;
+        currentOsc.frequency.value = f;
+        currentOsc.connect(gainNode);
+        currentOsc.start();
+
+        // 测量
+        const stableT = Math.max(10, dur * 0.4); 
+        await sleep(stableT);
+        
+        let sum = 0, cnt = 0;
+        const endT = performance.now() + (dur - stableT);
+        while(performance.now() < endT) {
+            analyser.getFloatTimeDomainData(timeData);
+            sum += getRMS(timeData);
+            cnt++;
+            await sleep(5);
+        }
+
+        currentOsc.stop();
+        currentOsc.disconnect();
+        currentOsc = null;
+
+        // 记录 dB
+        const avgRms = cnt ? sum/cnt : 0;
+        const db = 20 * Math.log10(avgRms + 1e-9);
+        globalData.stepData.push({f, db});
+        
+        drawMainChart();
+        await sleep(10);
+    }
+    
+    analyzePeak();
+}
+
+// ==================== 4. 算法核心：ESS (Exponential Sine Sweep) ====================
+
+// 4.1 生成 ESS 信号与逆滤波器
+function generateESS(f1, f2, dur, sr) {
+    const N = Math.floor(dur * sr);
+    const w1 = 2*Math.PI*f1;
+    const w2 = 2*Math.PI*f2;
+    const R = Math.log(w2/w1);
+    const K = dur * w1 / R;
+    const L = dur / R;
+
+    const sweep = new Float32Array(N);
+    const inv = new Float32Array(N);
+    
+    for(let n=0; n<N; n++) {
+        const t = n/sr;
+        // x(t) = sin(K * (exp(t/L) - 1))
+        const phase = K * (Math.exp(t/L) - 1);
+        sweep[n] = Math.sin(phase);
+        
+        // Inverse filter generation (Time reversed + Amplitude modulated)
+        // modulation m(t) reduces amplitude of higher freqs to compensate -3dB/oct
+        // For deconvolution: inv(t) = x(T-t) * exp(- (T-t)/L * R) ? 
+        // Standard ESS inverse: x_inv(t) = x(T-t) * (w1/w(T-t))
+        // w(t) = w1 * exp(t/L) -> w1/w(t) = exp(-t/L)
+        // We apply this modulation to the reversed signal.
+        
+        const tRev = (N - 1 - n) / sr;
+        const mod = Math.exp(-tRev / L); 
+        // Note: scaling helps keep FFT values sane
+        inv[n] = sweep[N - 1 - n] * mod;
+    }
+    
+    // Normalize inverse
+    let maxI = 0; for(let v of inv) maxI = Math.max(maxI, Math.abs(v));
+    for(let i=0; i<N; i++) inv[i] /= maxI;
+
+    return { sweep, inv };
+}
+
+// 4.2 卷积 (Convolution) 使用 MiniFFT
+function convolve(signal, filter) {
+    const len = signal.length + filter.length - 1;
+    let fftSize = 1;
+    while(fftSize < len) fftSize *= 2;
+    
+    const fft = new MiniFFT(fftSize);
+    
+    const sigPad = new Float32Array(fftSize);
+    const filtPad = new Float32Array(fftSize);
+    sigPad.set(signal);
+    filtPad.set(filter); // filter is already reversed in time domain if it's an inverse filter
+    
+    const sigC = fft.createComplexArray();
+    const filtC = fft.createComplexArray();
+    
+    fft.realTransform(sigC, sigPad);
+    fft.realTransform(filtC, filtPad);
+    
+    // Complex Multiply
+    const resC = fft.createComplexArray();
+    for(let i=0; i<fftSize; i++) {
+        const r1=sigC[2*i], i1=sigC[2*i+1];
+        const r2=filtC[2*i], i2=filtC[2*i+1];
+        resC[2*i] = r1*r2 - i1*i2;
+        resC[2*i+1] = r1*i2 + i1*r2;
+    }
+    
+    const result = new Float32Array(fftSize);
+    fft.inverseTransform(result, resC);
+    
+    return result;
+}
+
+// 4.3 运行 ESS
+async function runESS() {
+    const ctx = getAudioCtx();
+    await ctx.resume();
+    
+    const fStart = parseFloat($('fStart').value);
+    const fEnd = parseFloat($('fEnd').value);
+    const dur = parseFloat($('essDur').value);
+    const gainVal = parseFloat($('gain').value);
+    const sr = ctx.sampleRate;
+    
+    globalData.type = 'ess';
+    globalData.fStart = fStart;
+    globalData.fEnd = fEnd;
+    globalData.essResults = null;
+    $('essReport').style.display = 'block';
+    $('essReportText').textContent = "正在生成信号...";
+    
+    // 1. 生成
+    const { sweep, inv } = generateESS(fStart, fEnd, dur, sr);
+    
+    // 2. 准备录音
+    micStream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+    const recorder = new MediaRecorder(micStream, {mimeType: mime});
+    const chunks = [];
+    recorder.ondataavailable = e => chunks.push(e.data);
+    
+    // 3. 播放与录制
+    recorder.start();
+    await sleep(200); // 录音机预热
+    
+    const buf = ctx.createBuffer(1, sweep.length, sr);
+    buf.copyToChannel(sweep, 0);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const gn = ctx.createGain();
+    gn.gain.value = gainVal;
+    src.connect(gn);
+    gn.connect(ctx.destination);
+    
+    currentSource = src;
+    src.start();
+    
+    const t0 = ctx.currentTime;
+    const hudTimer = setInterval(() => {
+        if(!isRunning) return clearInterval(hudTimer);
+        const el = ctx.currentTime - t0;
+        const p = Math.min(100, el/dur*100);
+        $('hudProg').textContent = p.toFixed(0);
+        if(el <= dur) {
+             // HUD Freq: f1 * (f2/f1)^(t/T)
+             $('hudFreq').textContent = (fStart * Math.pow(fEnd/fStart, el/dur)).toFixed(1);
+        }
+    }, 100);
+    
+    // 等待播放 + 混响
+    await sleep(dur*1000 + 1000);
+    clearInterval(hudTimer);
+    if(currentSource) { currentSource.stop(); currentSource = null; }
+    recorder.stop();
+    
+    $('essReportText').textContent = "正在处理卷积 (这可能需要几秒钟)...";
+    await new Promise(r => recorder.onstop = r);
+    micStream.getTracks().forEach(t=>t.stop()); micStream = null;
+    
+    if(!isRunning) return; // aborted
+
+    // 4. 数据处理
+    const blob = new Blob(chunks, {type: mime});
+    const ab = await blob.arrayBuffer();
+    const audioB = await ctx.decodeAudioData(ab);
+    const recData = audioB.getChannelData(0);
+    
+    // 卷积
+    const ir = convolve(recData, inv);
+    
+    // 5. 谐波分析 (提取 IR 中的脉冲)
+    analyzeEssHarmonics(ir, sr, fStart, fEnd, dur);
+}
+
+function analyzeEssHarmonics(ir, sr, f1, f2, dur) {
+    // ESS 原理：因为使用 Log Sweep，不同阶谐波会在时间轴上分离。
+    // H1 (基频) 位于线性 IR 处（通常是最后，因为是循环卷积/线性卷积的时移）
+    // H2 会比 H1 提前 dt = T * log(2) / log(f2/f1)
+    
+    // 寻找 IR 主峰 (H1)
+    let maxVal = 0, maxIdx = 0;
+    for(let i=0; i<ir.length; i++) {
+        if(Math.abs(ir[i]) > maxVal) { maxVal = Math.abs(ir[i]); maxIdx = i; }
+    }
+    
+    const harmonics = [1, 2, 3];
+    const results = {};
+    const fftSize = 4096;
+    const fft = new MiniFFT(fftSize);
+    const freqLogBase = Math.log(f2/f1);
+
+    harmonics.forEach(h => {
+        // 计算偏移
+        const dt = dur * Math.log(h) / freqLogBase;
+        const offset = Math.round(dt * sr);
+        const center = maxIdx - offset;
+        
+        // 截取加窗
+        const seg = new Float32Array(fftSize);
+        if(center - fftSize/2 >= 0 && center + fftSize/2 < ir.length) {
+            for(let i=0; i<fftSize; i++) {
+                const win = 0.5 * (1 - Math.cos(2*Math.PI*i/(fftSize-1)));
+                seg[i] = ir[center - fftSize/2 + i] * win;
+            }
+        }
+        
+        // FFT 求幅频
+        const cOut = fft.createComplexArray();
+        fft.realTransform(cOut, seg);
+        
+        const freqs = [], amps = [];
+        for(let i=0; i<fftSize/2; i++) {
+            const mag = Math.sqrt(cOut[2*i]**2 + cOut[2*i+1]**2);
+            freqs.push(i * sr / fftSize);
+            amps.push(20*Math.log10(mag + 1e-9));
+        }
+        results[h] = { freqs, amps };
+    });
+    
+    globalData.essResults = results;
+    resetChartView(f1, f2);
+    drawMainChart();
+    updateEssReport(results, f1, f2);
+    analyzePeak();
+}
+
+// ==================== 5. 图表绘制引擎 (支持缩放/网格) ====================
+
+// 初始化图表交互
+function initChartInteraction(canvasId, viewObj, drawFn) {
+    const canvas = $(canvasId);
+    
+    // 滚轮缩放
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const w = canvas.width;
+        
+        if (viewObj === chartView) {
+            // 频率轴缩放 (对数逻辑较复杂，这里简化为范围缩放)
+            // 简单逻辑：缩放 factor
+            const factor = e.deltaY > 0 ? 1.1 : 0.9;
+            const range = viewObj.freq.max - viewObj.freq.min;
+            const newRange = range * factor;
+            const mouseFrac = mouseX / w;
+            // 保持鼠标指向的频率位置相对不变
+            const fMouse = viewObj.freq.min + range * mouseFrac; 
+            
+            viewObj.freq.min = fMouse - newRange * mouseFrac;
+            viewObj.freq.max = fMouse + newRange * (1 - mouseFrac);
+            // 限制
+            if(viewObj.freq.min < 1) viewObj.freq.min = 1;
+        } else {
+            // 波形缩放
+            const factor = e.deltaY > 0 ? 0.8 : 1.25;
+            viewObj.zoom *= factor;
+            if(viewObj.zoom < 1) viewObj.zoom = 1;
+        }
+        drawFn();
+    }, {passive:false});
+
+    // 拖拽平移
+    canvas.addEventListener('mousedown', e => {
+        viewObj.isDragging = true;
+        viewObj.lastX = e.clientX;
+    });
+    window.addEventListener('mouseup', () => viewObj.isDragging = false);
+    window.addEventListener('mousemove', e => {
+        if (!viewObj.isDragging) return;
+        const dx = e.clientX - viewObj.lastX;
+        viewObj.lastX = e.clientX;
+        const w = canvas.width;
+        
+        if (viewObj === chartView) {
+            const range = viewObj.freq.max - viewObj.freq.min;
+            const shift = - (dx / w) * range;
+            viewObj.freq.min += shift;
+            viewObj.freq.max += shift;
+        } else {
+            // 波形平移
+            viewObj.offset -= dx / viewObj.zoom; 
+        }
+        drawFn();
+    });
+    
+    // 双击复位
+    canvas.addEventListener('dblclick', () => {
+        if (viewObj === chartView) resetChartView(globalData.fStart, globalData.fEnd);
+        else { tapView.zoom = 1; tapView.offset = 0; }
+        drawFn();
+    });
+}
+
+function resetChartView(f1, f2) {
+    chartView.freq.min = f1;
+    chartView.freq.max = f2;
+    chartView.db.min = -100;
+    chartView.db.max = 0;
+}
+
+// 主绘制函数
+function drawMainChart() {
+    const canvas = $('plot');
+    // 处理 Retina 屏清晰度
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.parentNode.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    const w = rect.width;
+    const h = rect.height;
+
+    // 背景
+    ctx.fillStyle = "#061225";
+    ctx.fillRect(0, 0, w, h);
+    
+    const fMin = chartView.freq.min;
+    const fMax = chartView.freq.max;
+    if (fMin >= fMax) return;
+
+    // 绘制网格与坐标
+    drawGrid(ctx, w, h, fMin, fMax, -100, 10);
+
+    // 准备数据
+    if (globalData.type === 'step') {
+        const data = globalData.stepData;
+        if(data.length < 2) return;
+        
+        // 自动缩放 Y 轴 (可选，这里固定显示 dB)
+        // 绘制线条
+        ctx.beginPath();
+        ctx.strokeStyle = "#3fa7ff";
+        ctx.lineWidth = 2;
+        let started = false;
+        
+        // LogX 映射
+        const logMin = Math.log10(fMin);
+        const logMax = Math.log10(fMax);
+        const scaleX = w / (logMax - logMin);
+
+        data.forEach(p => {
+            if(p.f < fMin || p.f > fMax) return;
+            const x = (Math.log10(p.f) - logMin) * scaleX;
+            // Map dB (-100 to 0) to Y
+            const y = h - ((p.db + 100) / 100) * h; 
+            if(!started) { ctx.moveTo(x, y); started = true; }
+            else ctx.lineTo(x,y);
+        });
+        ctx.stroke();
+    } 
+    else if (globalData.type === 'ess' && globalData.essResults) {
+        const colors = {1:'#3fa7ff', 2:'#ffcf6b', 3:'#ff6b6b'};
+        const logMin = Math.log10(fMin);
+        const scaleX = w / (Math.log10(fMax) - logMin);
+
+        // 获取要显示的谐波
+        const visibleH = Array.from(document.querySelectorAll('.hToggle'))
+                         .filter(c=>c.checked).map(c=>parseInt(c.value));
+        
+        // 自动调整 Y 范围以适应数据
+        let maxDb = -100;
+        visibleH.forEach(k => {
+            if(globalData.essResults[k]) maxDb = Math.max(maxDb, ...globalData.essResults[k].amps);
+        });
+        const yTop = Math.ceil(maxDb/10)*10 + 10;
+        const yBot = yTop - 90;
+
+        visibleH.forEach(k => {
+            if(!globalData.essResults[k]) return;
+            const {freqs, amps} = globalData.essResults[k];
+            ctx.beginPath();
+            ctx.strokeStyle = colors[k] || '#fff';
+            ctx.lineWidth = k===1 ? 2 : 1;
+            let started = false;
+            
+            for(let i=0; i<freqs.length; i++) {
+                const f = freqs[i];
+                if(f < fMin || f > fMax) continue;
+                const x = (Math.log10(f) - logMin) * scaleX;
+                const y = h - ((amps[i] - yBot) / (yTop - yBot)) * h;
+                if(!started) { ctx.moveTo(x,y); started = true; }
+                else ctx.lineTo(x,y);
+            }
+            ctx.stroke();
+        });
+    }
+}
+
+function drawGrid(ctx, w, h, fMin, fMax, dbMin, dbMax) {
+    ctx.lineWidth = 1;
+    ctx.font = "10px sans-serif";
+    const logMin = Math.log10(fMin);
+    const logRange = Math.log10(fMax) - logMin;
+
+    // 频率竖线
+    ctx.strokeStyle = "#1f2a44";
+    ctx.fillStyle = "#5c6b8f";
+    ctx.textAlign = "center";
+    
+    // 生成 10, 20... 100, 200... 网格
+    let base = Math.pow(10, Math.floor(logMin));
+    while(base < fMax) {
+        [1, 2, 5].forEach(mult => {
+            const f = base * mult;
+            if(f >= fMin && f <= fMax) {
+                const x = (Math.log10(f) - logMin) / logRange * w;
+                ctx.beginPath();
+                ctx.moveTo(x, 0); ctx.lineTo(x, h);
+                ctx.stroke();
+                const txt = f >= 1000 ? (f/1000)+'k' : f;
+                ctx.fillText(txt, x, h - 5);
+            }
+        });
+        base *= 10;
+    }
+
+    // 幅度横线
+    ctx.textAlign = "left";
+    const range = 100; // fixed -100 to 0 mostly
+    for(let db = 0; db >= -100; db -= 20) {
+        const y = h - ((db + 100) / 100) * h;
+        ctx.beginPath();
+        ctx.moveTo(0, y); ctx.lineTo(w, y);
+        ctx.stroke();
+        ctx.fillText(db+"dB", 5, y - 2);
+    }
+}
+
+// 敲击检测绘图
+function drawTapChart() {
+    const canvas = $('tapWave');
+    if (!tapDataRaw) return;
+    
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.parentNode.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    const w = rect.width;
+    const h = rect.height;
+
+    ctx.fillStyle = "#061225";
+    ctx.fillRect(0,0,w,h);
+    
+    // 中线
+    ctx.strokeStyle = "#1f2a44";
+    ctx.beginPath(); ctx.moveTo(0, h/2); ctx.lineTo(w, h/2); ctx.stroke();
+
+    ctx.strokeStyle = "#5fc0ff";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    
+    const len = tapDataRaw.length;
+    // 每一个像素点代表的数据量
+    const step = Math.max(1, Math.floor(len / w / tapView.zoom));
+    const startIdx = Math.floor(tapView.offset);
+    
+    let hasMoved = false;
+    for(let x = 0; x < w; x++) {
+        const idx = startIdx + Math.floor(x * step);
+        if (idx >= 0 && idx < len) {
+            const v = tapDataRaw[idx];
+            const y = h/2 + v * (h/2) * 0.9; // 0.9 margin
+            if(!hasMoved) { ctx.moveTo(x, y); hasMoved=true; }
+            else ctx.lineTo(x, y);
+        }
+    }
+    ctx.stroke();
+}
+
+// ==================== 6. 数据分析与导出 ====================
+
+function analyzePeak() {
+    let peakF = 0, peakA = -999;
+    
+    if (globalData.type === 'step') {
+        globalData.stepData.forEach(p => {
+            if(p.db > peakA) { peakA = p.db; peakF = p.f; }
+        });
+        $('peakAmp').textContent = peakA.toFixed(1) + " dB";
+    } else if (globalData.type === 'ess' && globalData.essResults && globalData.essResults[1]) {
+        const h1 = globalData.essResults[1];
+        for(let i=0; i<h1.amps.length; i++) {
+            if(h1.freqs[i] >= globalData.fStart && h1.freqs[i] <= globalData.fEnd) {
+                if(h1.amps[i] > peakA) { peakA = h1.amps[i]; peakF = h1.freqs[i]; }
+            }
+        }
+        $('peakAmp').textContent = peakA.toFixed(1) + " dB";
+    }
+    
+    if(peakF > 0) $('peakFreq').textContent = peakF.toFixed(1);
+    else $('peakFreq').textContent = "—";
+}
+
+function updateEssReport(res, f1, f2) {
+    let txt = `ESS 扫频分析 (范围 ${f1}-${f2} Hz)\n--------------------------------\n`;
+    if(res[1]) {
+        let pF=0, pA=-999;
+        const r = res[1];
+        for(let i=0; i<r.amps.length; i++) {
+            if(r.freqs[i]>=f1 && r.freqs[i]<=f2 && r.amps[i]>pA) { pA=r.amps[i]; pF=r.freqs[i]; }
+        }
+        txt += `基频响应 (H1) 峰值: ${pF.toFixed(1)} Hz @ ${pA.toFixed(1)} dB\n`;
+    }
+    
+    [2,3].forEach(k => {
+        if(res[k]) {
+            let maxD = -999;
+            res[k].amps.forEach(a => maxD = Math.max(maxD, a));
+            txt += `H${k} 谐波最大幅度: ${maxD.toFixed(1)} dB\n`;
+        }
+    });
+    $('essReportText').textContent = txt;
+}
+
+// 敲击检测
+$('tapDetectBtn').addEventListener('click', async function() {
+    const btn = this;
+    btn.disabled = true;
+    btn.textContent = "录音中...";
+    const ctx = getAudioCtx();
+    await ctx.resume();
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const rec = new MediaRecorder(stream);
+        const chunks = [];
+        rec.ondataavailable = e => chunks.push(e.data);
+        rec.start();
+        await sleep(2000);
+        rec.stop();
+        await new Promise(r => rec.onstop = r);
+        stream.getTracks().forEach(t => t.stop());
+
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const buf = await blob.arrayBuffer();
+        const audioB = await ctx.decodeAudioData(buf);
+        let data = audioB.getChannelData(0);
+
+        // 高通滤波
+        if ($('enableHPF').checked) {
+            const offline = new OfflineAudioContext(1, data.length, audioB.sampleRate);
+            const b = offline.createBuffer(1, data.length, audioB.sampleRate);
+            b.copyToChannel(data, 0);
+            const s = offline.createBufferSource();
+            s.buffer = b;
+            const f = offline.createBiquadFilter();
+            f.type = 'highpass';
+            f.frequency.value = 50;
+            s.connect(f);
+            f.connect(offline.destination);
+            s.start();
+            const out = await offline.startRendering();
+            data = out.getChannelData(0);
+        }
+
+        tapDataRaw = data;
+        tapView.zoom = 1; tapView.offset = 0; // reset
+        drawTapChart();
+        
+        // 基频估算 (自相关)
+        const pitch = detectPitch(data, audioB.sampleRate);
+        $('tapFreq').textContent = pitch ? pitch.toFixed(1) : "—";
+        
+        // 下载
+        const wav = audioBufferToWav(data, audioB.sampleRate);
+        const url = URL.createObjectURL(wav);
+        const dl = $('downloadTap');
+        dl.href = url;
+        dl.download = `impulse_${new Date().getTime()}.wav`;
+        dl.style.display = 'inline-block';
+
+    } catch(e) {
+        alert("录音失败: " + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "开始敲击录音 (2s)";
+    }
+});
+
+function detectPitch(buf, sr) {
+    // 简单自相关，寻找最大峰
+    const n = 1024;
+    let maxRms=0, pos=0;
+    // 找能量最大的片段
+    for(let i=0; i<buf.length-n; i+=512) {
+        let s=0; for(let j=0; j<n; j++) s+=buf[i+j]*buf[i+j];
+        if(s>maxRms){maxRms=s; pos=i;}
+    }
+    const chunk = buf.slice(pos, pos+n);
+    
+    let bestR=0, bestK=-1;
+    for(let k=20; k<n/2; k++) { // ~2kHz down to low freq
+        let sum=0;
+        for(let i=0; i<n-k; i++) sum += chunk[i]*chunk[i+k];
+        if(sum > bestR) { bestR=sum; bestK=k; }
+    }
+    return bestK > 0 ? sr/bestK : null;
+}
+
+// 导出 CSV
+$('exportCSV').onclick = () => {
+    let csv = "";
+    if (globalData.type === 'step') {
+        csv = "Freq(Hz),Amp(dB)\n" + globalData.stepData.map(p=>`${p.f.toFixed(2)},${p.db.toFixed(2)}`).join("\n");
+        downloadFile(csv, 'step_sweep.csv');
+    } else if (globalData.type === 'ess' && globalData.essResults) {
+        const h1 = globalData.essResults[1];
+        if(!h1) return;
+        csv = "Freq(Hz),H1(dB),H2(dB),H3(dB)\n";
+        for(let i=0; i<h1.freqs.length; i++) {
+            const f = h1.freqs[i];
+            if(f < globalData.fStart) continue;
+            if(f > globalData.fEnd) break;
+            let row = `${f.toFixed(2)},${h1.amps[i].toFixed(2)}`;
+            [2,3].forEach(k => row += `,${globalData.essResults[k] ? globalData.essResults[k].amps[i].toFixed(2) : ''}`);
+            csv += row + "\n";
+        }
+        downloadFile(csv, 'ess_sweep.csv');
+    } else {
+        alert("暂无数据");
+    }
+};
+
+function downloadFile(content, name) {
+    const b = new Blob([content], {type:'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b); a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// WAV Header Helper
+function audioBufferToWav(samples, sr) {
+    const buf = new ArrayBuffer(44 + samples.length * 2);
+    const v = new DataView(buf);
+    const writeS = (o, s) => { for(let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+    writeS(0,'RIFF'); v.setUint32(4, 36+samples.length*2, true); writeS(8,'WAVE');
+    writeS(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+    v.setUint32(24,sr,true); v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
+    writeS(36,'data'); v.setUint32(40,samples.length*2,true);
+    for(let i=0; i<samples.length; i++) {
+        let s = Math.max(-1, Math.min(1, samples[i]));
+        v.setInt16(44+i*2, s<0 ? s*0x8000 : s*0x7FFF, true);
+    }
+    return new Blob([v], {type:'audio/wav'});
+}
+
+// 初始化
+initChartInteraction('plot', chartView, drawMainChart);
+initChartInteraction('tapWave', tapView, drawTapChart);
+document.querySelectorAll('.hToggle').forEach(el => el.addEventListener('change', drawMainChart));
+window.addEventListener('resize', () => { drawMainChart(); drawTapChart(); });
 </script>
 </body>
 </html>
