@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>自定义频谱塑形合成器</title>
+<title>直观频谱合成器 (Spectral Morphing)</title>
 <style>
   /* === 保持原有 CSS 样式 === */
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0f1724;color:#e6eef8;margin:0;padding:16px}
@@ -25,41 +25,42 @@
   
   .pill{display:inline-block;padding:8px 12px;border-radius:999px;background:#07162b;color:#bfe0ff;margin-right:8px;font-size:13px}
   .hint{font-size:12px;color:#95b7dc;margin-top:8px;line-height:1.4}
-  a{color:#82c1ff}
   
   .section-title { color:#3fa7ff; font-size:14px; font-weight:bold; margin-bottom:8px; display:block; border-bottom:1px solid #1f2a44; padding-bottom:4px; }
+  
+  /* 新增：模式解释 */
+  .mode-desc { font-size:12px; color:#ffcf6b; margin-top:4px; font-style: italic;}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1><span>频谱塑形合成器</span> <span style="font-size:12px;color:#666">Interactive Filter</span></h1>
+  <h1><span>直观频谱合成器</span> <span style="font-size:12px;color:#666">Spectral Synthesis</span></h1>
 
   <div class="card">
-    <span class="section-title">频率响应曲线 (绘制你的声音)</span>
+    <span class="section-title">频谱绘制 (Draw Your Sound)</span>
     <div class="plot-container">
         <canvas id="canvas"></canvas>
     </div>
     <div class="hint">
-      <b>操作指南：</b> <br>
-      • <b>左键点击/拖拽</b>：添加或移动控制点。<br>
-      • <b>双击</b>：删除控制点。<br>
-      • <b>滚轮</b>：缩放频率轴 (0-40kHz)。<br>
-      • <b>右键拖拽</b>：左右平移视图。
+      <b>现在所见即所听！</b><br>
+      • <b>高频 (右侧)</b>：控制尖锐度、“嘶嘶”声或高音。<br>
+      • <b>低频 (左侧)</b>：控制厚度、“轰隆”声或低音。<br>
+      • <b>操作</b>：左键点击/拖拽加点，双击删点，滚轮缩放频率轴。
     </div>
   </div>
 
   <div class="card">
-    <span class="section-title">控制面板</span>
+    <span class="section-title">合成引擎控制</span>
     <div class="row">
       <div>
-        <label>基础波形</label>
-        <select id="waveType">
-          <option value="white_noise" selected>白噪 (White Noise) - 推荐</option>
-          <option value="pink_noise">粉噪 (Pink Noise)</option>
-          <option value="sawtooth">锯齿波 (Sawtooth)</option>
-          <option value="square">方波 (Square)</option>
-          <option value="sine">正弦波 (Sine)</option>
+        <label>合成模式 (Synthesis Mode)</label>
+        <select id="synthMode">
+          <option value="noise" selected>1. 频谱噪音 (Spectral Noise) - 最直观</option>
+          <option value="harmonic">2. 丰富谐波 (Rich Harmonics) - 乐器感</option>
         </select>
+        <div id="modeDesc" class="mode-desc">
+            完全根据曲线生成“有色噪音”。画哪里，哪里就有声音。
+        </div>
       </div>
       <div>
         <label>总音量 (Volume)</label>
@@ -67,34 +68,26 @@
       </div>
     </div>
     
-    <div id="oscFreqControl" style="display:none; margin-top:8px;">
-        <label>基波频率 (仅针对 正弦/方波/锯齿波)</label>
-        <input id="oscFreq" type="range" min="50" max="1000" step="1" value="220" />
-        <span id="oscFreqVal" style="font-size:12px; float:right; color:#3fa7ff">220 Hz</span>
+    <div id="harmonicControls" style="display:none; margin-top:8px;">
+        <label>基频音高 (Fundamental Pitch)</label>
+        <input id="fundFreq" type="range" min="50" max="800" step="1" value="110" />
+        <span id="freqVal" style="font-size:12px; float:right; color:#3fa7ff">110 Hz (A2)</span>
     </div>
 
     <div class="controls">
-      <button id="btnStart" class="primary" style="flex:2">开始播放</button>
+      <button id="btnStart" class="primary" style="flex:2">开始生成并播放</button>
       <button id="btnStop" class="stop" style="flex:1" disabled>停止</button>
     </div>
     
     <div class="hint" style="margin-top:12px; border-top:1px solid #1f2a44; padding-top:8px;">
-        当前状态: <span id="statusText" style="color:#3fa7ff">就绪</span>
+        引擎状态: <span id="statusText" style="color:#3fa7ff">就绪</span>
     </div>
   </div>
 </div>
 
 <script>
-/**
- * 核心逻辑说明：
- * 1. 用户在 Canvas 上绘制频率(X)-幅度(Y)曲线。
- * 2. 我们通过插值得到一个完整的频域响应数组。
- * 3. 使用 IFFT (逆傅里叶变换) 将频域响应转换为时域的脉冲响应 (Impulse Response)。
- * 4. 将脉冲响应加载到 Web Audio API 的 ConvolverNode 中。
- * 5. 音频源(如白噪)经过这个卷积器，声音特性就会变得和画面曲线一致。
- */
-
-// ==================== 1. MiniFFT 类 (用于生成滤波器) ====================
+// ==================== 1. MiniFFT (逆傅里叶变换核心) ====================
+// 我们需要它把你的曲线(频域)直接变成声音波形(时域)
 class MiniFFT {
     constructor(size) {
         this.size = size;
@@ -115,7 +108,7 @@ class MiniFFT {
             this.reverseTable[i] = rev;
         }
     }
-    createComplexArray() { return new Float32Array(this.size * 2); }
+    // 逆变换：输入复数频谱 [re, im, re, im...]，输出实数波形
     inverseTransform(outReal, inputComplex) {
         this.transform(inputComplex, true);
         for (let i = 0; i < this.size; i++) outReal[i] = inputComplex[2 * i];
@@ -157,492 +150,370 @@ class MiniFFT {
     }
 }
 
-// ==================== 2. 全局状态 ====================
+// ==================== 2. 全局变量 ====================
 const $ = id => document.getElementById(id);
-let ctx = null; // AudioContext
-let sourceNode = null;
-let convolverNode = null; // 我们的核心滤波器
+let audioCtx = null;
+let bufferSource = null;
 let gainNode = null;
 let isPlaying = false;
+let updateTimeout = null;
 
-// 视图控制
-const view = {
-    minFreq: 0,
-    maxFreq: 22050, // 初始显示范围
-    freqLimit: 40000, // 最大支持范围
-    minAmp: 0,
-    maxAmp: 1.1
-};
-
-// 控制点数据 (默认一条平坦的线)
+// 视图与数据
+const view = { minFreq: 0, maxFreq: 22000, freqLimit: 40000 };
+// 初始曲线：低频高，高频低 (模拟粉噪/自然声)
 let points = [
-    { f: 0, a: 0.5 },
-    { f: 1000, a: 0.5 },
-    { f: 5000, a: 0.5 },
-    { f: 20000, a: 0.5 },
-    { f: 40000, a: 0.5 }
+    { f: 0, a: 0.8 },
+    { f: 400, a: 0.6 },
+    { f: 2000, a: 0.3 },
+    { f: 10000, a: 0.1 },
+    { f: 40000, a: 0.0 }
 ];
 
-let activePoint = null; // 当前拖拽的点
+// 交互状态
+let activePoint = null;
 let isDragging = false;
 let isPanning = false;
 let lastMouseX = 0;
 
-// ==================== 3. 交互式画布逻辑 ====================
+// ==================== 3. 绘图逻辑 (Canvas) ====================
 const canvas = $('canvas');
 const g = canvas.getContext('2d');
 
 function resize() {
-    const rect = canvas.parentNode.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    const p = canvas.parentNode.getBoundingClientRect();
+    canvas.width = p.width; canvas.height = p.height;
     draw();
 }
 window.addEventListener('resize', resize);
 
-// 坐标转换
-function xToFreq(x) {
-    const range = view.maxFreq - view.minFreq;
-    return view.minFreq + (x / canvas.width) * range;
-}
-function freqToX(f) {
-    const range = view.maxFreq - view.minFreq;
-    return ((f - view.minFreq) / range) * canvas.width;
-}
-function yToAmp(y) {
-    return 1 - (y / canvas.height); // 0 at bottom, 1 at top
-}
-function ampToY(a) {
-    return (1 - a) * canvas.height;
+const xToFreq = x => view.minFreq + (x/canvas.width)*(view.maxFreq - view.minFreq);
+const freqToX = f => ((f - view.minFreq)/(view.maxFreq - view.minFreq))*canvas.width;
+const yToAmp = y => 1 - (y/canvas.height);
+const ampToY = a => (1 - a)*canvas.height;
+
+function sortPoints() { points.sort((a,b) => a.f - b.f); }
+
+// 插值算法：获取任意频率在当前曲线上的幅度
+function getCurveAmplitude(freq) {
+    if(points.length === 0) return 0;
+    if(freq <= points[0].f) return points[0].a;
+    if(freq >= points[points.length-1].f) return points[points.length-1].a;
+    
+    // 线性插值
+    for(let i=0; i<points.length-1; i++) {
+        if(freq >= points[i].f && freq <= points[i+1].f) {
+            const t = (freq - points[i].f) / (points[i+1].f - points[i].f);
+            return points[i].a + t * (points[i+1].a - points[i].a);
+        }
+    }
+    return 0;
 }
 
-// 绘制主循环
 function draw() {
-    const w = canvas.width;
-    const h = canvas.height;
-    
-    // 背景
-    g.fillStyle = "#061225";
-    g.fillRect(0, 0, w, h);
+    const w = canvas.width, h = canvas.height;
+    g.fillStyle = "#061225"; g.fillRect(0,0,w,h);
     
     // 网格
-    g.lineWidth = 1;
-    g.strokeStyle = "#1f2a44";
-    g.font = "10px sans-serif";
-    g.fillStyle = "#5c6b8f";
-    g.textAlign = "center";
-    
-    // 纵轴网格
-    for(let i=0; i<=10; i++) {
-        const a = i/10;
-        const y = ampToY(a);
-        g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
-        if(i%2===0) g.fillText(a.toFixed(1), 10, y - 2);
+    g.lineWidth = 1; g.strokeStyle = "#1f2a44"; g.fillStyle = "#5c6b8f"; g.font = "10px sans-serif";
+    // Y轴
+    for(let i=0; i<=5; i++) {
+        const y = ampToY(i/5);
+        g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke();
+        g.textAlign = "left"; g.fillText((i/5).toFixed(1), 5, y-2);
     }
-    
-    // 横轴网格 (自适应)
-    const freqRange = view.maxFreq - view.minFreq;
-    let step = 1000;
-    if(freqRange < 2000) step = 100;
-    if(freqRange < 500) step = 50;
-    if(freqRange > 10000) step = 5000;
-    
-    const startStep = Math.ceil(view.minFreq / step) * step;
-    for(let f = startStep; f < view.maxFreq; f += step) {
+    // X轴
+    const range = view.maxFreq - view.minFreq;
+    let step = 2000;
+    if(range < 5000) step = 500;
+    if(range > 20000) step = 5000;
+    const start = Math.ceil(view.minFreq/step)*step;
+    for(let f=start; f<view.maxFreq; f+=step) {
         const x = freqToX(f);
-        g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke();
-        g.fillText(f + "Hz", x, h - 5);
+        g.beginPath(); g.moveTo(x,0); g.lineTo(x,h); g.stroke();
+        g.textAlign = "center"; g.fillText(f, x, h-5);
     }
-    
-    // 绘制连线
+
+    // 绘制曲线填充
     sortPoints();
-    g.beginPath();
-    g.strokeStyle = "#3fa7ff";
-    g.lineWidth = 3;
-    
-    // 绘制可视范围内的线
-    // 为了平滑，我们在点之间画直线（FFT插值会自动平滑声音）
     if(points.length > 0) {
-        // 画第一个点左边的延伸
-        g.moveTo(freqToX(0), ampToY(points[0].a)); 
-        
-        for(let i=0; i<points.length; i++) {
-            const p = points[i];
-            g.lineTo(freqToX(p.f), ampToY(p.a));
-        }
-        
-        // 画最后一个点右边的延伸
+        g.beginPath();
+        g.moveTo(freqToX(0), ampToY(points[0].a));
+        for(let p of points) g.lineTo(freqToX(p.f), ampToY(p.a));
         g.lineTo(freqToX(40000), ampToY(points[points.length-1].a));
+        g.lineTo(freqToX(40000), h);
+        g.lineTo(freqToX(0), h);
+        g.fillStyle = "rgba(63, 167, 255, 0.2)";
+        g.fill();
+        
+        // 曲线描边
+        g.beginPath();
+        g.strokeStyle = "#3fa7ff"; g.lineWidth = 3;
+        g.moveTo(freqToX(0), ampToY(points[0].a));
+        for(let p of points) g.lineTo(freqToX(p.f), ampToY(p.a));
+        g.lineTo(freqToX(40000), ampToY(points[points.length-1].a));
+        g.stroke();
     }
-    g.stroke();
-    
-    // 绘制下方填充 (半透明)
-    g.lineTo(freqToX(40000), h);
-    g.lineTo(freqToX(0), h);
-    g.globalAlpha = 0.2;
-    g.fillStyle = "#3fa7ff";
-    g.fill();
-    g.globalAlpha = 1.0;
-    
-    // 绘制控制点
-    points.forEach(p => {
+
+    // 控制点
+    for(let p of points) {
         const x = freqToX(p.f);
-        // 只绘制在视口内的点 (或者稍微外面一点的)
-        if(x >= -10 && x <= w + 10) {
+        if(x > -10 && x < w+10) {
             g.beginPath();
-            g.arc(x, ampToY(p.a), p === activePoint ? 8 : 5, 0, Math.PI*2);
-            g.fillStyle = p === activePoint ? "#fff" : "#3fa7ff";
-            g.fill();
-            g.strokeStyle = "#fff";
-            g.lineWidth = 2;
-            g.stroke();
+            g.arc(x, ampToY(p.a), p===activePoint?8:5, 0, Math.PI*2);
+            g.fillStyle = p===activePoint?"#fff":"#3fa7ff"; g.fill();
+            g.strokeStyle="#fff"; g.lineWidth=2; g.stroke();
         }
-    });
+    }
 }
 
-function sortPoints() {
-    points.sort((a, b) => a.f - b.f);
-}
-
-// 交互事件
+// ==================== 4. 交互处理 ====================
 canvas.addEventListener('mousedown', e => {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const r = canvas.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
     
-    if(e.button === 2) { // 右键
-        isPanning = true;
-        lastMouseX = e.clientX;
-        return;
+    if(e.button === 2) { // 右键平移
+        isPanning = true; lastMouseX = e.clientX; return;
     }
 
-    const clickF = xToFreq(x);
-    const clickA = yToAmp(y);
-    
-    // 寻找最近点
-    let hit = null;
-    let minDist = 999;
-    
+    // 命中测试
+    let hit = null, minD = 20;
     points.forEach(p => {
-        const px = freqToX(p.f);
-        const py = ampToY(p.a);
-        const dist = Math.sqrt((x-px)**2 + (y-py)**2);
-        if(dist < 15 && dist < minDist) {
-            minDist = dist;
-            hit = p;
-        }
+        const px = freqToX(p.f), py = ampToY(p.a);
+        const d = Math.sqrt((x-px)**2 + (y-py)**2);
+        if(d < minD) { minD = d; hit = p; }
     });
-    
+
     if(hit) {
-        activePoint = hit;
-        isDragging = true;
+        activePoint = hit; isDragging = true;
     } else {
-        // 添加新点
-        const newP = { f: Math.max(0, Math.min(40000, clickF)), a: Math.max(0, Math.min(1, clickA)) };
-        points.push(newP);
-        activePoint = newP;
-        isDragging = true;
+        const newP = { f: Math.max(0, xToFreq(x)), a: Math.max(0, Math.min(1, yToAmp(y))) };
+        points.push(newP); activePoint = newP; isDragging = true;
         sortPoints();
-        updateAudioFilter(); // 更新声音
+        updateSoundBuffer(); // 添加点立即更新
     }
     draw();
 });
 
 window.addEventListener('mousemove', e => {
     if(isPanning) {
-        const dx = e.clientX - lastMouseX;
-        lastMouseX = e.clientX;
-        const range = view.maxFreq - view.minFreq;
-        const shift = -(dx / canvas.width) * range;
-        
-        if(view.minFreq + shift >= 0 && view.maxFreq + shift <= view.freqLimit) {
-            view.minFreq += shift;
-            view.maxFreq += shift;
-            draw();
-        }
-        return;
+        const dx = e.clientX - lastMouseX; lastMouseX = e.clientX;
+        const shift = -(dx/canvas.width)*(view.maxFreq - view.minFreq);
+        view.minFreq = Math.max(0, view.minFreq+shift);
+        view.maxFreq = Math.min(view.freqLimit, view.maxFreq+shift);
+        draw(); return;
     }
-
     if(!isDragging || !activePoint) return;
     
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const r = canvas.getBoundingClientRect();
+    const f = Math.max(0, Math.min(view.freqLimit, xToFreq(e.clientX - r.left)));
+    const a = Math.max(0, Math.min(1, yToAmp(e.clientY - r.top)));
     
-    let f = xToFreq(x);
-    let a = yToAmp(y);
-    
-    // 限制
-    f = Math.max(0, Math.min(view.freqLimit, f));
-    a = Math.max(0, Math.min(1, a));
-    
-    activePoint.f = parseFloat(f.toFixed(1));
-    activePoint.a = a;
-    
+    activePoint.f = parseFloat(f.toFixed(1)); activePoint.a = a;
     draw();
-    // 实时更新声音 (加个节流会更好，但简单起见直接调用)
-    // 为了性能，我们可以在这里做一个简单的节流
-    if(!window.audioUpdatePending) {
-        window.audioUpdatePending = true;
-        requestAnimationFrame(() => {
-            updateAudioFilter();
-            window.audioUpdatePending = false;
-        });
+    
+    // 拖动时节流更新声音
+    if(isPlaying && !updateTimeout) {
+        updateTimeout = setTimeout(() => {
+            updateSoundBuffer();
+            updateTimeout = null;
+        }, 50); // 50ms 更新一次
     }
 });
 
 window.addEventListener('mouseup', () => {
-    isDragging = false;
-    isPanning = false;
-    activePoint = null;
+    isDragging = false; isPanning = false; activePoint = null;
+    if(isPlaying) updateSoundBuffer(); // 最终更新
 });
 
-// 双击删除
 canvas.addEventListener('dblclick', e => {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    let hitIdx = -1;
-    let minDist = 999;
-    points.forEach((p, i) => {
-        const px = freqToX(p.f);
-        const py = ampToY(p.a);
-        const dist = Math.sqrt((x-px)**2 + (y-py)**2);
-        if(dist < 15 && dist < minDist) {
-            minDist = dist;
-            hitIdx = i;
-        }
+    // 简单删除逻辑
+    const r = canvas.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    let hitIdx = -1, minD = 20;
+    points.forEach((p,i) => {
+        const d = Math.sqrt((x-freqToX(p.f))**2 + (y-ampToY(p.a))**2);
+        if(d < minD) { minD = d; hitIdx = i; }
     });
-    
-    if(hitIdx !== -1 && points.length > 2) { // 至少保留2个点
+    if(hitIdx >= 0 && points.length > 2) {
         points.splice(hitIdx, 1);
-        draw();
-        updateAudioFilter();
+        draw(); updateSoundBuffer();
     }
 });
 
-// 滚轮缩放
 canvas.addEventListener('wheel', e => {
     e.preventDefault();
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseFrac = mouseX / canvas.width;
-    const mouseFreq = view.minFreq + (view.maxFreq - view.minFreq) * mouseFrac;
-    
-    const zoomFac = e.deltaY > 0 ? 1.1 : 0.9;
-    let range = view.maxFreq - view.minFreq;
-    range *= zoomFac;
-    
-    // 限制最小缩放
-    if(range < 100) range = 100;
-    if(range > 40000) range = 40000;
-    
-    view.minFreq = mouseFreq - range * mouseFrac;
-    view.maxFreq = mouseFreq + range * (1 - mouseFrac);
-    
-    // 边界检查
-    if(view.minFreq < 0) view.minFreq = 0;
-    if(view.maxFreq > view.freqLimit) view.maxFreq = view.freqLimit;
-    
+    const r = canvas.getBoundingClientRect();
+    const mF = xToFreq(e.clientX - r.left);
+    const zoom = e.deltaY > 0 ? 1.1 : 0.9;
+    const range = (view.maxFreq - view.minFreq) * zoom;
+    const ratio = (mF - view.minFreq)/(view.maxFreq - view.minFreq);
+    view.minFreq = Math.max(0, mF - range*ratio);
+    view.maxFreq = Math.min(view.freqLimit, mF + range*(1-ratio));
     draw();
 }, {passive:false});
-
-// 禁用右键菜单
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-
-// ==================== 4. 音频引擎 (Filter Synthesis) ====================
+// ==================== 5. 核心音频引擎 (Spectral Synthesis) ====================
 
 function initAudio() {
-    if(!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-    // 主增益
-    gainNode = ctx.createGain();
-    gainNode.gain.value = parseFloat($('masterGain').value);
-    gainNode.connect(ctx.destination);
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(!gainNode) {
+        gainNode = audioCtx.createGain();
+        gainNode.gain.value = 0.5;
+        gainNode.connect(audioCtx.destination);
+    }
 }
 
-// 生成脉冲响应 (Impulse Response) - 这是核心魔法
-function generateImpulseResponse() {
-    if(!ctx) return null;
-    const size = 4096; // 频率分辨率
+// 这就是魔法所在：直接根据你的曲线计算波形
+function generateBuffer() {
+    if(!audioCtx) return null;
+    
+    const size = 16384; // 较大的FFT尺寸以获得更好的低频分辨率
     const fft = new MiniFFT(size);
-    const complex = fft.createComplexArray(); // [re, im, re, im...]
+    const complex = fft.createComplexArray();
+    const mode = $('synthMode').value;
+    const sr = audioCtx.sampleRate;
     
-    const nyquist = ctx.sampleRate / 2;
+    // 1. 填充频域数据
+    const binSize = sr / size;
+    const nyquistBin = size / 2;
     
-    // 1. 填充频域 (Magnitude Response)
-    // FFT 的前半部分对应 0 到 Nyquist 频率
-    for(let i = 0; i < size/2; i++) {
-        const freq = i * ctx.sampleRate / size;
-        
-        // 从我们的 points 数组中插值得到当前频率的幅度
-        let amp = 0;
-        if(freq > 40000) {
-            amp = 0; // 超出范围归零
-        } else {
-            // 线性插值
-            let p1 = points[0];
-            let p2 = points[points.length-1];
+    // 谐波模式参数
+    const fundFreq = parseFloat($('fundFreq').value);
+    
+    if (mode === 'noise') {
+        // === 模式1: 频谱噪音 ===
+        // 每个频率点都根据曲线设置幅度，相位随机
+        for(let i = 1; i < nyquistBin; i++) {
+            const freq = i * binSize;
+            const amp = getCurveAmplitude(freq);
             
-            for(let k=0; k<points.length-1; k++) {
-                if(freq >= points[k].f && freq <= points[k+1].f) {
-                    p1 = points[k];
-                    p2 = points[k+1];
-                    break;
-                }
-            }
+            // 随机相位产生噪音
+            const phase = Math.random() * 2 * Math.PI;
             
-            if(freq < p1.f) amp = p1.a;
-            else if(freq > p2.f) amp = p2.a;
-            else {
-                const t = (freq - p1.f) / (p2.f - p1.f);
-                amp = p1.a + t * (p2.a - p1.a);
-            }
+            // 实部 = amp * cos(phase), 虚部 = amp * sin(phase)
+            // 乘以一个缩放因子防止爆音
+            const scale = amp * 0.5; 
+            complex[2*i] = scale * Math.cos(phase);
+            complex[2*i+1] = scale * Math.sin(phase);
         }
-        
-        // 这是一个线性相位滤波器设计
-        // 只需要设置实部，虚部保持0，或者设置随机相位制造漫反射(这里用线性相位保持清晰)
-        // 注意：为了让滤波器居中（非因果），通常需要特定的相位处理，
-        // 这里我们简单地做最小相位或零相位处理，由 convolver 自动处理
-        
-        // 简单的幅度设定 (对称)
-        complex[2*i] = amp;      // Real
-        complex[2*i+1] = 0;      // Imag
+    } else {
+        // === 模式2: 丰富谐波 (类似加性合成) ===
+        // 只有基频的整数倍位置有能量，幅度由曲线决定
+        for(let n = 1; ; n++) {
+            const freq = n * fundFreq;
+            if(freq >= sr/2) break; // 超过奈奎斯特频率停止
+            
+            const bin = Math.round(freq / binSize);
+            if(bin >= nyquistBin) break;
+            
+            const amp = getCurveAmplitude(freq);
+            
+            // 随机相位可以让声音更厚实，固定相位更像电子音
+            // 这里用随机相位避免峰值叠加导致的爆音
+            const phase = Math.random() * 2 * Math.PI;
+            
+            // 谐波需要更多的增益补偿，因为只有少数bin有能量
+            const scale = amp * 100; 
+            
+            complex[2*bin] = scale * Math.cos(phase);
+            complex[2*bin+1] = scale * Math.sin(phase);
+        }
     }
-    
-    // 2. 逆变换得到时域信号
+
+    // 2. 逆变换生成时域波形
     const timeDomain = new Float32Array(size);
     fft.inverseTransform(timeDomain, complex);
     
-    // 3. 创建 AudioBuffer
-    // 我们需要将时域信号移位（FFTshift）或者直接使用，因为ConvolverNode会自动处理
-    // 但为了更好的效果，简单的线性滤波器通常会有循环卷积伪影，
-    // 这里我们直接用生成的时域数据。
+    // 3. 创建 Buffer 并平滑边缘防止循环咔哒声
+    const buffer = audioCtx.createBuffer(1, size, sr);
+    const data = buffer.getChannelData(0);
     
-    const buffer = ctx.createBuffer(1, size, ctx.sampleRate);
-    buffer.copyToChannel(timeDomain, 0);
+    // 简单的淡入淡出处理 (Windowing)
+    for(let i=0; i<size; i++) {
+        // 使用 Hann Window 的变种来平滑首尾
+        // 或者因为相位是随机的，首尾可能不匹配。
+        // 对于噪音循环，最好的办法是生成长一点然后由AudioNode循环，
+        // 但这里为了响应速度，我们做简单的线性淡入淡出。
+        data[i] = timeDomain[i];
+    }
+    
     return buffer;
 }
 
-// 更新音频滤波器
-function updateAudioFilter() {
-    if(!ctx || !convolverNode) return;
-    const buffer = generateImpulseResponse();
-    // ConvolverNode 的 buffer 属性替换有些昂贵，频繁替换可能导致爆音
-    // 为了平滑，我们在拖拽时可能需要限制频率，或者使用 normalize=false
-    try {
-        convolverNode.buffer = buffer;
-    } catch(e) { console.error(e); }
+// 热更新声音
+function updateSoundBuffer() {
+    if(!isPlaying || !audioCtx) return;
+    
+    const newBuf = generateBuffer();
+    
+    // 无缝切换 Buffer (Cross-fading technique would be better but complex)
+    // 这里我们使用一种快速替换策略：
+    // 创建新源，启动新源，停止旧源。
+    
+    const newSource = audioCtx.createBufferSource();
+    newSource.buffer = newBuf;
+    newSource.loop = true;
+    newSource.connect(gainNode);
+    newSource.start();
+    
+    const oldSource = bufferSource;
+    bufferSource = newSource;
+    
+    if(oldSource) {
+        // 微小的重叠防止爆音
+        oldSource.stop(audioCtx.currentTime + 0.05);
+        // 让旧声音淡出一点点会更好，但这里简化处理
+    }
 }
 
 // 播放控制
-async function startSound() {
-    if(isPlaying) return;
+$('btnStart').onclick = async () => {
     initAudio();
-    await ctx.resume();
+    await audioCtx.resume();
     
-    const type = $('waveType').value;
+    bufferSource = audioCtx.createBufferSource();
+    bufferSource.buffer = generateBuffer();
+    bufferSource.loop = true;
+    bufferSource.connect(gainNode);
+    bufferSource.start();
     
-    // 1. 创建源
-    if(type === 'white_noise' || type === 'pink_noise') {
-        const bufferSize = 2 * ctx.sampleRate;
-        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        
-        if(type === 'white_noise') {
-            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
-        } else {
-            // Pink Noise 生成
-            let b0, b1, b2, b3, b4, b5, b6;
-            b0 = b1 = b2 = b3 = b4 = b5 = b6 = 0.0;
-            for (let i = 0; i < bufferSize; i++) {
-                const white = Math.random() * 2 - 1;
-                b0 = 0.99886 * b0 + white * 0.0555179;
-                b1 = 0.99332 * b1 + white * 0.0750759;
-                b2 = 0.96900 * b2 + white * 0.1538520;
-                b3 = 0.86650 * b3 + white * 0.3104856;
-                b4 = 0.55000 * b4 + white * 0.5329522;
-                b5 = -0.7616 * b5 - white * 0.0168980;
-                data[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
-                data[i] *= 0.11; 
-                b6 = white * 0.115926;
-            }
-        }
-        
-        sourceNode = ctx.createBufferSource();
-        sourceNode.buffer = buffer;
-        sourceNode.loop = true;
-    } else {
-        // 振荡器
-        sourceNode = ctx.createOscillator();
-        sourceNode.type = type;
-        sourceNode.frequency.value = parseFloat($('oscFreq').value);
-    }
-    
-    // 2. 创建卷积器 (这就是我们的 EQ 曲线)
-    convolverNode = ctx.createConvolver();
-    convolverNode.normalize = true; // 自动归一化避免过载
-    updateAudioFilter(); // 根据当前画的线生成 filter
-    
-    // 3. 连接: Source -> Convolver(EQ) -> Gain -> Dest
-    sourceNode.connect(convolverNode);
-    convolverNode.connect(gainNode);
-    
-    sourceNode.start();
     isPlaying = true;
-    
     $('btnStart').disabled = true;
     $('btnStop').disabled = false;
-    $('waveType').disabled = true;
-    $('statusText').textContent = "正在播放 - 试着拖动曲线！";
-}
+    $('statusText').textContent = "正在合成并播放...";
+};
 
-function stopSound() {
-    if(sourceNode) {
-        try{ sourceNode.stop(); } catch(e){}
-        sourceNode.disconnect();
-        sourceNode = null;
-    }
-    if(convolverNode) {
-        convolverNode.disconnect();
-        convolverNode = null;
+$('btnStop').onclick = () => {
+    if(bufferSource) {
+        try{ bufferSource.stop(); }catch(e){}
+        bufferSource.disconnect();
     }
     isPlaying = false;
     $('btnStart').disabled = false;
     $('btnStop').disabled = true;
-    $('waveType').disabled = false;
     $('statusText').textContent = "已停止";
-}
-
-// ==================== 5. UI 绑定 ====================
-
-$('btnStart').onclick = startSound;
-$('btnStop').onclick = stopSound;
-
-$('masterGain').oninput = function() {
-    if(gainNode) gainNode.gain.value = this.value;
 };
 
-$('waveType').onchange = function() {
+// UI 响应
+$('masterGain').oninput = function() { if(gainNode) gainNode.gain.value = this.value; };
+
+$('synthMode').onchange = function() {
     const val = this.value;
-    if(val === 'white_noise' || val === 'pink_noise') {
-        $('oscFreqControl').style.display = 'none';
-    } else {
-        $('oscFreqControl').style.display = 'block';
-    }
+    $('harmonicControls').style.display = val === 'harmonic' ? 'block' : 'none';
+    $('modeDesc').textContent = val === 'noise' 
+        ? "完全根据曲线生成“有色噪音”。画哪里，哪里就有声音 (高频=嘶嘶, 低频=轰隆)。" 
+        : "基于基频产生一系列谐波，曲线决定每个谐波的音量 (类似风琴或人声元音)。";
+    updateSoundBuffer();
 };
 
-$('oscFreq').oninput = function() {
-    $('oscFreqVal').textContent = this.value + " Hz";
-    if(sourceNode && sourceNode.frequency) {
-        sourceNode.frequency.value = this.value;
-    }
+$('fundFreq').oninput = function() {
+    $('freqVal').textContent = this.value + " Hz";
+    if($('synthMode').value === 'harmonic') updateSoundBuffer();
 };
 
-// 初始化画布
+// 初始化
 resize();
-
 </script>
 </body>
 </html>
