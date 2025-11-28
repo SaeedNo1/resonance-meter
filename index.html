@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>专业共振频率扫测仪</title>
+<title>专业共振频率扫测仪 (CSV导入版)</title>
 <style>
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0f1724;color:#e6eef8;margin:0;padding:16px}
-  .wrap{max-width:900px;margin:0 auto}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0f1724;color:#e6eef8;margin:0;padding:16px; min-height: 100vh;}
+  .wrap{max-width:900px;margin:0 auto; position: relative; z-index: 1;}
   h1{font-size:20px;margin:6px 0 12px; display:flex; justify-content:space-between; align-items:center;}
-  .card{background:#0b1220;border:1px solid #1f2a44;border-radius:12px;padding:12px;margin-bottom:12px}
+  .card{background:#0b1220;border:1px solid #1f2a44;border-radius:12px;padding:12px;margin-bottom:12px; position:relative;}
   label{font-size:13px;color:#9fb0d6;display:block;margin-top:8px}
   input,select,button{font-size:15px;padding:8px;border-radius:8px;border:1px solid #26364f;background:#081024;color:#e6eef8;width:100%;box-sizing:border-box}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -34,11 +34,28 @@
   /* 专用样式 */
   .section-title { color:#3fa7ff; font-size:14px; font-weight:bold; margin-bottom:8px; display:block; border-bottom:1px solid #1f2a44; padding-bottom:4px; }
   .mode-select { border: 1px solid #3fa7ff; background: #0c1a30; color: #3fa7ff; font-weight: bold; }
+
+  /* 拖拽覆盖层 */
+  #dropOverlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(63, 167, 255, 0.15);
+    border: 4px dashed #3fa7ff;
+    z-index: 9999;
+    display: none;
+    pointer-events: none;
+    justify-content: center; align-items: center;
+    color: #3fa7ff; font-size: 24px; font-weight: bold;
+    backdrop-filter: blur(2px);
+  }
+  #dropOverlay.active { display: flex; }
 </style>
 </head>
 <body>
+
+<div id="dropOverlay">松开鼠标导入测试数据 CSV</div>
+
 <div class="wrap">
-  <h1><span>固有频率扫测仪 Pro</span> <span style="font-size:12px;color:#666">v2.0</span></h1>
+  <h1><span>固有频率扫测仪 Pro</span> <span style="font-size:12px;color:#666">v2.1 CSV版</span></h1>
 
   <div class="card">
     <div class="row">
@@ -105,7 +122,8 @@
     </div>
 
     <div class="hint">
-      提示：鼠标滚轮可缩放图表，拖拽可移动视图。双击图表复位。
+      提示：<b>可直接将导出的 CSV 文件拖入此页面进行回放分析。</b><br>
+      鼠标滚轮可缩放图表，拖拽可移动视图。双击图表复位。
     </div>
   </div>
 
@@ -237,7 +255,6 @@ let micStream = null;
 let currentOsc = null;
 let currentSource = null;
 let isRunning = false;
-let abortController = null; // 用于取消异步操作
 
 // 数据存储
 let globalData = {
@@ -326,6 +343,137 @@ function setRunningUI(active) {
         $('hudFreq').textContent = "—";
     }
 }
+
+// ==================== CSV 拖拽导入逻辑 ====================
+const dropOverlay = $('dropOverlay');
+
+window.addEventListener('dragover', e => { e.preventDefault(); dropOverlay.classList.add('active'); });
+window.addEventListener('dragleave', e => { 
+    if (e.relatedTarget === null) dropOverlay.classList.remove('active'); 
+});
+window.addEventListener('drop', e => {
+    e.preventDefault();
+    dropOverlay.classList.remove('active');
+    
+    if(e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        parseImportCSV(e.dataTransfer.files[0]);
+    }
+});
+
+function parseImportCSV(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const text = e.target.result;
+        const lines = text.trim().split(/\r?\n/);
+        if (lines.length < 2) return alert("无效的 CSV 文件");
+
+        // 简单的启发式判断格式
+        // 步进格式头: Freq(Hz),Amp(dB) 或类似
+        // ESS格式头: Freq(Hz),H1(dB),H2(dB)...
+        const header = lines[0].toLowerCase();
+        const isEss = header.includes("h1") || header.includes("h2");
+        const isStep = !isEss && (header.includes("amp") || header.includes("db") || lines[0].split(',').length === 2);
+
+        if (!isEss && !isStep) {
+            return alert("无法识别 CSV 格式，请使用本工具导出的文件。");
+        }
+
+        let fMin = Infinity, fMax = -Infinity;
+
+        if (isStep) {
+            // 解析 Step Sweep 数据
+            globalData.type = 'step';
+            globalData.stepData = [];
+            
+            // 找列索引
+            const hParts = lines[0].split(',');
+            let fIdx = 0, aIdx = 1; // 默认
+            hParts.forEach((h, i) => {
+                if(h.toLowerCase().includes('freq')) fIdx = i;
+                if(h.toLowerCase().includes('amp') || h.toLowerCase().includes('db')) aIdx = i;
+            });
+
+            for(let i=1; i<lines.length; i++) {
+                const parts = lines[i].split(',');
+                if(parts.length < 2) continue;
+                const f = parseFloat(parts[fIdx]);
+                const db = parseFloat(parts[aIdx]);
+                
+                if(!isNaN(f) && !isNaN(db)) {
+                    globalData.stepData.push({f, db});
+                    if(f < fMin) fMin = f;
+                    if(f > fMax) fMax = f;
+                }
+            }
+        } else {
+            // 解析 ESS 数据
+            globalData.type = 'ess';
+            globalData.essResults = {};
+            
+            const hParts = lines[0].split(',');
+            const colMap = {};
+            let fIdx = 0;
+            
+            hParts.forEach((h, i) => {
+                const clean = h.toUpperCase();
+                if(clean.includes('FREQ')) fIdx = i;
+                if(clean.includes('H1')) colMap[1] = i;
+                if(clean.includes('H2')) colMap[2] = i;
+                if(clean.includes('H3')) colMap[3] = i;
+                if(clean.includes('H4')) colMap[4] = i;
+            });
+
+            // 初始化
+            Object.keys(colMap).forEach(k => globalData.essResults[k] = {freqs:[], amps:[]});
+
+            for(let i=1; i<lines.length; i++) {
+                const parts = lines[i].split(',');
+                const f = parseFloat(parts[fIdx]);
+                if(isNaN(f)) continue;
+                if(f < fMin) fMin = f;
+                if(f > fMax) fMax = f;
+
+                Object.entries(colMap).forEach(([harm, colIdx]) => {
+                    const db = parseFloat(parts[colIdx]);
+                    if(!isNaN(db)) {
+                        globalData.essResults[harm].freqs.push(f);
+                        globalData.essResults[harm].amps.push(db);
+                    }
+                });
+            }
+        }
+
+        // 更新 UI
+        if(fMin !== Infinity && fMax !== -Infinity) {
+            globalData.fStart = fMin;
+            globalData.fEnd = fMax;
+            $('fStart').value = fMin;
+            $('fEnd').value = fMax;
+            
+            // 切换到对应模式 UI
+            $('algoMode').value = globalData.type;
+            $('algoMode').dispatchEvent(new Event('change'));
+            
+            // 重置视图
+            resetChartView(fMin, fMax);
+            
+            // 分析峰值
+            analyzePeak();
+            
+            // 绘图
+            drawMainChart();
+            
+            // 提示
+            $('hudFreq').textContent = "—"; // Reset HUD
+            $('essReportText').textContent = "CSV 数据已导入并加载。";
+            alert(`成功导入 ${globalData.type === 'step' ? '步进扫频' : 'ESS'} 数据。`);
+        } else {
+            alert("导入失败：未找到有效数据。");
+        }
+    };
+    reader.readAsText(file);
+}
+
 
 // ==================== 3. 算法核心：Step Sweep ====================
 async function runStepSweep() {
@@ -428,15 +576,8 @@ function generateESS(f1, f2, dur, sr) {
         sweep[n] = Math.sin(phase);
         
         // Inverse filter generation (Time reversed + Amplitude modulated)
-        // modulation m(t) reduces amplitude of higher freqs to compensate -3dB/oct
-        // For deconvolution: inv(t) = x(T-t) * exp(- (T-t)/L * R) ? 
-        // Standard ESS inverse: x_inv(t) = x(T-t) * (w1/w(T-t))
-        // w(t) = w1 * exp(t/L) -> w1/w(t) = exp(-t/L)
-        // We apply this modulation to the reversed signal.
-        
         const tRev = (N - 1 - n) / sr;
         const mod = Math.exp(-tRev / L); 
-        // Note: scaling helps keep FFT values sane
         inv[n] = sweep[N - 1 - n] * mod;
     }
     
@@ -458,7 +599,7 @@ function convolve(signal, filter) {
     const sigPad = new Float32Array(fftSize);
     const filtPad = new Float32Array(fftSize);
     sigPad.set(signal);
-    filtPad.set(filter); // filter is already reversed in time domain if it's an inverse filter
+    filtPad.set(filter); 
     
     const sigC = fft.createComplexArray();
     const filtC = fft.createComplexArray();
@@ -532,7 +673,6 @@ async function runESS() {
         const p = Math.min(100, el/dur*100);
         $('hudProg').textContent = p.toFixed(0);
         if(el <= dur) {
-             // HUD Freq: f1 * (f2/f1)^(t/T)
              $('hudFreq').textContent = (fStart * Math.pow(fEnd/fStart, el/dur)).toFixed(1);
         }
     }, 100);
@@ -563,11 +703,6 @@ async function runESS() {
 }
 
 function analyzeEssHarmonics(ir, sr, f1, f2, dur) {
-    // ESS 原理：因为使用 Log Sweep，不同阶谐波会在时间轴上分离。
-    // H1 (基频) 位于线性 IR 处（通常是最后，因为是循环卷积/线性卷积的时移）
-    // H2 会比 H1 提前 dt = T * log(2) / log(f2/f1)
-    
-    // 寻找 IR 主峰 (H1)
     let maxVal = 0, maxIdx = 0;
     for(let i=0; i<ir.length; i++) {
         if(Math.abs(ir[i]) > maxVal) { maxVal = Math.abs(ir[i]); maxIdx = i; }
@@ -580,12 +715,10 @@ function analyzeEssHarmonics(ir, sr, f1, f2, dur) {
     const freqLogBase = Math.log(f2/f1);
 
     harmonics.forEach(h => {
-        // 计算偏移
         const dt = dur * Math.log(h) / freqLogBase;
         const offset = Math.round(dt * sr);
         const center = maxIdx - offset;
         
-        // 截取加窗
         const seg = new Float32Array(fftSize);
         if(center - fftSize/2 >= 0 && center + fftSize/2 < ir.length) {
             for(let i=0; i<fftSize; i++) {
@@ -594,7 +727,6 @@ function analyzeEssHarmonics(ir, sr, f1, f2, dur) {
             }
         }
         
-        // FFT 求幅频
         const cOut = fft.createComplexArray();
         fft.realTransform(cOut, seg);
         
@@ -718,8 +850,6 @@ function drawMainChart() {
         const data = globalData.stepData;
         if(data.length < 2) return;
         
-        // 自动缩放 Y 轴 (可选，这里固定显示 dB)
-        // 绘制线条
         ctx.beginPath();
         ctx.strokeStyle = "#3fa7ff";
         ctx.lineWidth = 2;
@@ -1033,7 +1163,7 @@ function audioBufferToWav(samples, sr) {
     writeS(36,'data'); v.setUint32(40,samples.length*2,true);
     for(let i=0; i<samples.length; i++) {
         let s = Math.max(-1, Math.min(1, samples[i]));
-        v.setInt16(44+i*2, s<0 ? s*0x8000 : s*0x7FFF, true);
+        v.setInt16(44+i*2, s<0 ? s*0x8000 : s *0x7FFF, true);
     }
     return new Blob([v], {type:'audio/wav'});
 }
