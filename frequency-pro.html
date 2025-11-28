@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>直观频谱合成器 Pro (CSV支持)</title>
+<title>直观频谱合成器(CSV支持)</title>
 <style>
   /* === 保持原有 CSS 样式 === */
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0f1724;color:#e6eef8;margin:0;padding:16px; min-height:100vh;}
@@ -34,7 +34,7 @@
     border: 4px dashed #3fa7ff;
     z-index: 999;
     display: none;
-    pointer-events: none; /* 让事件穿透到底层处理 */
+    pointer-events: none;
     justify-content: center; align-items: center;
     color: #3fa7ff; font-size: 24px; font-weight: bold;
     backdrop-filter: blur(2px);
@@ -72,7 +72,7 @@
           <option value="harmonic">2. 丰富谐波 (Rich Harmonics)</option>
         </select>
         <div id="modeDesc" class="mode-desc">
-            根据曲线生成“有色噪音”。画哪里，哪里就有声音。
+            基于曲线生成有色噪音 (高频=嘶嘶, 低频=轰隆)。
         </div>
       </div>
       <div>
@@ -99,7 +99,7 @@
 </div>
 
 <script>
-// ==================== 1. MiniFFT (修复版) ====================
+// ==================== 1. MiniFFT (已修复) ====================
 class MiniFFT {
     constructor(size) {
         this.size = size;
@@ -121,7 +121,7 @@ class MiniFFT {
         }
     }
     
-    // === 修复：补回了缺失的方法 ===
+    // === 修复：补回了缺失的方法，以解决 Uncaught TypeError ===
     createComplexArray() { 
         return new Float32Array(this.size * 2); 
     }
@@ -214,8 +214,6 @@ function getCurveAmplitude(freq) {
     if(freq <= points[0].f) return points[0].a;
     if(freq >= points[points.length-1].f) return points[points.length-1].a;
     
-    // 简单的线性插值
-    // 如果点非常多(CSV导入)，这里可以用二分查找优化，但现代JS引擎对几百个点也没问题
     for(let i=0; i<points.length-1; i++) {
         if(freq >= points[i].f && freq <= points[i+1].f) {
             const t = (freq - points[i].f) / (points[i+1].f - points[i].f);
@@ -267,7 +265,7 @@ function draw() {
         g.stroke();
     }
 
-    // 控制点 (如果是CSV导入的大量点，就不绘制圆点，只显示线)
+    // 控制点 (如果点数量少于100，才绘制圆点)
     if(points.length < 100) {
         for(let p of points) {
             const x = freqToX(p.f);
@@ -318,7 +316,7 @@ function parseCSV(file) {
         }
         
         if(freqIdx === -1 || ampIdx === -1) {
-            // 如果没有表头，尝试默认 0和1列
+            // 如果没有找到明确表头，尝试默认 0和1列
             freqIdx = 0; ampIdx = 1;
         }
 
@@ -333,21 +331,11 @@ function parseCSV(file) {
             if(isNaN(f) || isNaN(val)) continue;
             if(f < 0 || f > 40000) continue;
 
-            // 3. 处理幅度单位
-            // 假设 CSV 里的通常是 dB (如 -100 到 0) 或者是 线性 (0-1)
-            // 简单的启发式判断：如果大部分值 < 0，认为是 dB
-            // 但为了保险，我们把 dB 转线性
-            // 通常 dB = 20 * log10(Linear)  => Linear = 10 ^ (dB / 20)
+            // 3. 处理幅度单位：如果值小于 0，当做 dB 处理并转换为线性
             let lin = val;
-            
-            // 如果值明显是 dB (例如 -20, -60)，转换它
-            // 如果是 0.5, 0.8，则保持
-            // 简单逻辑：如果值小于 -1 或者 大于 1 (不太可能)，当做dB处理
-            // 或者如果用户是用上一个工具导出的，它是 dB。
             if(val < 0) {
                 lin = Math.pow(10, val / 20);
             }
-            // 钳位
             lin = Math.max(0, Math.min(1, lin));
 
             newPoints.push({f: f, a: lin});
@@ -355,14 +343,12 @@ function parseCSV(file) {
 
         if(newPoints.length > 0) {
             // 4. 优化：如果点太多 (>200)，为了性能进行降采样
-            // 保留极值特征会比较复杂，这里采用简单的步进采样
             if(newPoints.length > 200) {
                 const optimized = [];
                 const step = Math.ceil(newPoints.length / 200);
                 for(let i=0; i<newPoints.length; i+=step) {
                     optimized.push(newPoints[i]);
                 }
-                // 确保收尾都在
                 if(optimized[optimized.length-1] !== newPoints[newPoints.length-1]) {
                     optimized.push(newPoints[newPoints.length-1]);
                 }
@@ -375,7 +361,7 @@ function parseCSV(file) {
             draw();
             updateSoundBuffer();
         } else {
-            alert("无法解析 CSV 数据，请检查格式。");
+            alert("无法解析 CSV 数据，请检查文件内容是否包含频率和幅度/dB数据。");
         }
     };
     reader.readAsText(file);
@@ -389,8 +375,7 @@ canvas.addEventListener('mousedown', e => {
     if(e.button === 2) { isPanning = true; lastMouseX = e.clientX; return; }
 
     let hit = null, minD = 20;
-    // 如果点太多，增加点击难度或只允许新增，这里仅在前100个点时允许拖拽
-    if(points.length < 100) {
+    if(points.length < 100) { // 点太多时禁止拖拽
         points.forEach(p => {
             const px = freqToX(p.f), py = ampToY(p.a);
             const d = Math.sqrt((x-px)**2 + (y-py)**2);
@@ -486,6 +471,7 @@ function generateBuffer() {
     const fundFreq = parseFloat($('fundFreq').value);
     
     if (mode === 'noise') {
+        // 频谱噪音模式
         for(let i = 1; i < nyquistBin; i++) {
             const freq = i * binSize;
             const amp = getCurveAmplitude(freq);
@@ -495,6 +481,7 @@ function generateBuffer() {
             complex[2*i+1] = scale * Math.sin(phase);
         }
     } else {
+        // 丰富谐波模式
         for(let n = 1; ; n++) {
             const freq = n * fundFreq;
             if(freq >= sr/2) break;
@@ -530,6 +517,7 @@ function updateSoundBuffer() {
     const oldSource = bufferSource;
     bufferSource = newSource;
     
+    // 0.05秒的交叉淡出/入，防止爆音
     if(oldSource) oldSource.stop(audioCtx.currentTime + 0.05);
 }
 
