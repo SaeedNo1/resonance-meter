@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>专业共振频率扫测仪 (CSV导入版)</title>
+<title>专业共振频率扫测仪</title>
 <style>
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0f1724;color:#e6eef8;margin:0;padding:16px; min-height: 100vh;}
   .wrap{max-width:900px;margin:0 auto; position: relative; z-index: 1;}
@@ -76,19 +76,29 @@
             <option value="ess" selected>ESS (指数正弦扫 - 快速，高精度)</option>
         </select>
         
-        <div id="stepParams" class="row" style="margin-top:8px; display:none;">
-            <div><label>步数 (Steps)</label><input id="steps" type="number" value="80" min="2" /></div>
-            <div><label>每步时长 (ms)</label><input id="dur" type="number" value="120" min="20" /></div>
-            <div style="grid-column: span 2;">
-                <label>波形</label>
-                <select id="wave">
-                    <option value="sine">正弦波 (Sine)</option>
-                    <option value="triangle">三角波</option>
-                    <option value="square">方波</option>
-                </select>
+        <div id="stepParams" style="margin-top:8px; display:none;">
+            <div class="row">
+                <div><label>步数 (Steps)</label><input id="steps" type="number" value="80" min="2" /></div>
+                <div><label>每步时长 (ms)</label><input id="dur" type="number" value="120" min="20" /></div>
+            </div>
+            <div class="row" style="grid-template-columns: 1fr 1fr; margin-top:8px;">
+                <div>
+                    <label>频率步进</label>
+                    <select id="freqSpacing">
+                        <option value="log" selected>对数 (Logarithmic) - 适合宽频扫测</option>
+                        <option value="linear">线性 (Linear) - 适合窄范围精测</option>
+                    </select>
+                </div>
+                <div>
+                    <label>波形</label>
+                    <select id="wave">
+                        <option value="sine">正弦波 (Sine)</option>
+                        <option value="triangle">三角波</option>
+                        <option value="square">方波</option>
+                    </select>
+                </div>
             </div>
         </div>
-
         <div id="essParams" class="row" style="margin-top:8px;">
             <div><label>扫频时长 (s)</label><input id="essDur" type="number" value="10" step="1" min="1" /></div>
             <div>
@@ -102,14 +112,14 @@
         </div>
     </div>
     
-    <label>播放音量 (Gain 0-1)</label>
-    <input id="gain" type="range" min="0" max="1" step="0.01" value="0.8" />
+    <label>播放音量 (Gain 0-1) - **请务必调至最大 1.0**</label>
+    <input id="gain" type="range" min="0" max="1" step="0.01" value="1.0" />
 
     <div class="controls">
       <button id="mainBtn" class="primary" style="flex:2;">开始测试</button>
       <button id="stopBtn" class="stop" style="flex:1;" disabled>停止</button>
       <button id="exportCSV" style="flex:1;">导出数据</button>
-      <button onclick="location.href='Frequency.html'">准备共振</button>
+      <button onclick="alert('请使用上一轮提供的“正弦波加性合成器”代码实现曲线播放功能。')">准备共振</button>
     </div>
 
     <div id="hud">
@@ -122,8 +132,7 @@
     </div>
 
     <div class="hint">
-      提示：<b>可直接将导出的 CSV 文件拖入此页面进行回放分析。</b><br>
-      鼠标滚轮可缩放图表，拖拽可移动视图。双击图表复位。
+      提示：<b>共振强度主要取决于您的扬声器功率和耦合效果。</b>使用线性步进配合小范围扫频可提高检测精度。
     </div>
   </div>
 
@@ -159,7 +168,6 @@
 
 <script>
 // ==================== 0. 内嵌 MiniFFT 库 ====================
-// 一个自包含的 Radix-2 FFT 实现，用于替代缺失的外部库
 class MiniFFT {
     constructor(size) {
         this.size = size;
@@ -181,10 +189,8 @@ class MiniFFT {
         }
     }
 
-    // 创建复数数组 [re, im, re, im...]
     createComplexArray() { return new Float32Array(this.size * 2); }
 
-    // 实数转复数 FFT
     realTransform(out, input) {
         for (let i = 0; i < this.size; i++) {
             out[2 * i] = input[i];
@@ -193,17 +199,15 @@ class MiniFFT {
         this.transform(out, false);
     }
 
-    // 复数逆变换
     inverseTransform(outReal, inputComplex) {
         this.transform(inputComplex, true);
         for (let i = 0; i < this.size; i++) {
-            outReal[i] = inputComplex[2 * i]; // 已经缩放
+            outReal[i] = inputComplex[2 * i];
         }
     }
 
     transform(data, inverse) {
         const n = this.size;
-        // Bit-reverse copy
         for (let i = 0; i < n; i++) {
             const rev = this.reverseTable[i];
             if (i < rev) {
@@ -213,7 +217,6 @@ class MiniFFT {
             }
         }
 
-        // Cooley-Tukey
         for (let size = 2; size <= n; size *= 2) {
             const halfsize = size / 2;
             const tablestep = n / size;
@@ -224,7 +227,6 @@ class MiniFFT {
                     const tpre = data[idx2];
                     const tpim = data[idx2 + 1];
                     
-                    // Trigonometric values
                     let cost = this.cosTable[k];
                     let sint = this.sinTable[k];
                     if (inverse) sint = -sint;
@@ -240,7 +242,6 @@ class MiniFFT {
             }
         }
         
-        // Normalize for inverse
         if (inverse) {
             const f = 1.0 / n;
             for (let i = 0; i < 2 * n; i++) data[i] *= f;
@@ -268,7 +269,7 @@ let tapDataRaw = null; // 敲击波形数据
 
 // 图表视图状态 (用于缩放和平移)
 const chartView = {
-    freq: { min: 0, max: 0 }, // 当前显示的频率范围
+    freq: { min: 0, max: 0 },
     db: { min: -100, max: 0 },
     isDragging: false,
     lastX: 0
@@ -295,7 +296,7 @@ function getAudioCtx() {
 // 模式切换
 $('algoMode').addEventListener('change', (e) => {
     const mode = e.target.value;
-    $('stepParams').style.display = mode === 'step' ? 'grid' : 'none';
+    $('stepParams').style.display = mode === 'step' ? 'block' : 'none'; // Changed to block for simplicity
     $('essParams').style.display = mode === 'ess' ? 'grid' : 'none';
 });
 
@@ -304,7 +305,6 @@ $('mainBtn').addEventListener('click', async () => {
     if (isRunning) return;
     const mode = $('algoMode').value;
     
-    // UI 状态
     setRunningUI(true);
     
     try {
@@ -344,7 +344,7 @@ function setRunningUI(active) {
     }
 }
 
-// ==================== CSV 拖拽导入逻辑 ====================
+// ==================== CSV 拖拽导入逻辑 (保持不变) ====================
 const dropOverlay = $('dropOverlay');
 
 window.addEventListener('dragover', e => { e.preventDefault(); dropOverlay.classList.add('active'); });
@@ -367,9 +367,6 @@ function parseImportCSV(file) {
         const lines = text.trim().split(/\r?\n/);
         if (lines.length < 2) return alert("无效的 CSV 文件");
 
-        // 简单的启发式判断格式
-        // 步进格式头: Freq(Hz),Amp(dB) 或类似
-        // ESS格式头: Freq(Hz),H1(dB),H2(dB)...
         const header = lines[0].toLowerCase();
         const isEss = header.includes("h1") || header.includes("h2");
         const isStep = !isEss && (header.includes("amp") || header.includes("db") || lines[0].split(',').length === 2);
@@ -381,13 +378,11 @@ function parseImportCSV(file) {
         let fMin = Infinity, fMax = -Infinity;
 
         if (isStep) {
-            // 解析 Step Sweep 数据
             globalData.type = 'step';
             globalData.stepData = [];
             
-            // 找列索引
             const hParts = lines[0].split(',');
-            let fIdx = 0, aIdx = 1; // 默认
+            let fIdx = 0, aIdx = 1;
             hParts.forEach((h, i) => {
                 if(h.toLowerCase().includes('freq')) fIdx = i;
                 if(h.toLowerCase().includes('amp') || h.toLowerCase().includes('db')) aIdx = i;
@@ -406,7 +401,6 @@ function parseImportCSV(file) {
                 }
             }
         } else {
-            // 解析 ESS 数据
             globalData.type = 'ess';
             globalData.essResults = {};
             
@@ -423,7 +417,6 @@ function parseImportCSV(file) {
                 if(clean.includes('H4')) colMap[4] = i;
             });
 
-            // 初始化
             Object.keys(colMap).forEach(k => globalData.essResults[k] = {freqs:[], amps:[]});
 
             for(let i=1; i<lines.length; i++) {
@@ -443,28 +436,22 @@ function parseImportCSV(file) {
             }
         }
 
-        // 更新 UI
         if(fMin !== Infinity && fMax !== -Infinity) {
             globalData.fStart = fMin;
             globalData.fEnd = fMax;
             $('fStart').value = fMin;
             $('fEnd').value = fMax;
             
-            // 切换到对应模式 UI
             $('algoMode').value = globalData.type;
             $('algoMode').dispatchEvent(new Event('change'));
             
-            // 重置视图
             resetChartView(fMin, fMax);
             
-            // 分析峰值
             analyzePeak();
             
-            // 绘图
             drawMainChart();
             
-            // 提示
-            $('hudFreq').textContent = "—"; // Reset HUD
+            $('hudFreq').textContent = "—";
             $('essReportText').textContent = "CSV 数据已导入并加载。";
             alert(`成功导入 ${globalData.type === 'step' ? '步进扫频' : 'ESS'} 数据。`);
         } else {
@@ -475,7 +462,7 @@ function parseImportCSV(file) {
 }
 
 
-// ==================== 3. 算法核心：Step Sweep ====================
+// ==================== 3. 算法核心：Step Sweep (已修改) ====================
 async function runStepSweep() {
     const ctx = getAudioCtx();
     await ctx.resume();
@@ -486,13 +473,14 @@ async function runStepSweep() {
     const dur = parseFloat($('dur').value);
     const wave = $('wave').value;
     const gainVal = parseFloat($('gain').value);
+    const spacing = $('freqSpacing').value; // <<< 新增控制变量
 
     // 重置数据
     globalData.type = 'step';
     globalData.stepData = [];
     globalData.fStart = fStart;
     globalData.fEnd = fEnd;
-    resetChartView(fStart, fEnd); // 重置视图
+    resetChartView(fStart, fEnd);
 
     // 麦克风
     micStream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
@@ -507,15 +495,22 @@ async function runStepSweep() {
     gainNode.gain.value = gainVal;
     gainNode.connect(ctx.destination);
 
-    // 生成频率表 (对数分布)
+    // 生成频率表 (线性/对数步进) <<< 核心修改
     const freqs = [];
-    for(let i=0; i<steps; i++) freqs.push(fStart * Math.pow(fEnd/fStart, i/(steps-1)));
+    if (spacing === 'log') {
+        // 对数分布 - 适合大范围扫频
+        for(let i=0; i<steps; i++) freqs.push(fStart * Math.pow(fEnd/fStart, i/(steps-1)));
+    } else {
+        // 线性分布 - 适合小范围精测
+        const stepSize = (fEnd - fStart) / (steps - 1);
+        for(let i=0; i<steps; i++) freqs.push(fStart + i * stepSize);
+    }
+
 
     for(let i=0; i<freqs.length; i++) {
         if(!isRunning) break;
         const f = freqs[i];
         
-        // HUD
         $('hudFreq').textContent = f.toFixed(1);
         $('hudProg').textContent = Math.round(i/steps*100);
 
@@ -543,7 +538,6 @@ async function runStepSweep() {
         currentOsc.disconnect();
         currentOsc = null;
 
-        // 记录 dB
         const avgRms = cnt ? sum/cnt : 0;
         const db = 20 * Math.log10(avgRms + 1e-9);
         globalData.stepData.push({f, db});
@@ -555,7 +549,7 @@ async function runStepSweep() {
     analyzePeak();
 }
 
-// ==================== 4. 算法核心：ESS (Exponential Sine Sweep) ====================
+// ==================== 4. 算法核心：ESS (Exponential Sine Sweep) (保持不变) ====================
 
 // 4.1 生成 ESS 信号与逆滤波器
 function generateESS(f1, f2, dur, sr) {
@@ -571,17 +565,14 @@ function generateESS(f1, f2, dur, sr) {
     
     for(let n=0; n<N; n++) {
         const t = n/sr;
-        // x(t) = sin(K * (exp(t/L) - 1))
         const phase = K * (Math.exp(t/L) - 1);
         sweep[n] = Math.sin(phase);
         
-        // Inverse filter generation (Time reversed + Amplitude modulated)
         const tRev = (N - 1 - n) / sr;
         const mod = Math.exp(-tRev / L); 
         inv[n] = sweep[N - 1 - n] * mod;
     }
     
-    // Normalize inverse
     let maxI = 0; for(let v of inv) maxI = Math.max(maxI, Math.abs(v));
     for(let i=0; i<N; i++) inv[i] /= maxI;
 
@@ -607,7 +598,6 @@ function convolve(signal, filter) {
     fft.realTransform(sigC, sigPad);
     fft.realTransform(filtC, filtPad);
     
-    // Complex Multiply
     const resC = fft.createComplexArray();
     for(let i=0; i<fftSize; i++) {
         const r1=sigC[2*i], i1=sigC[2*i+1];
@@ -640,19 +630,16 @@ async function runESS() {
     $('essReport').style.display = 'block';
     $('essReportText').textContent = "正在生成信号...";
     
-    // 1. 生成
     const { sweep, inv } = generateESS(fStart, fEnd, dur, sr);
     
-    // 2. 准备录音
     micStream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
     const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
     const recorder = new MediaRecorder(micStream, {mimeType: mime});
     const chunks = [];
     recorder.ondataavailable = e => chunks.push(e.data);
     
-    // 3. 播放与录制
     recorder.start();
-    await sleep(200); // 录音机预热
+    await sleep(200);
     
     const buf = ctx.createBuffer(1, sweep.length, sr);
     buf.copyToChannel(sweep, 0);
@@ -677,7 +664,6 @@ async function runESS() {
         }
     }, 100);
     
-    // 等待播放 + 混响
     await sleep(dur*1000 + 1000);
     clearInterval(hudTimer);
     if(currentSource) { currentSource.stop(); currentSource = null; }
@@ -687,18 +673,15 @@ async function runESS() {
     await new Promise(r => recorder.onstop = r);
     micStream.getTracks().forEach(t=>t.stop()); micStream = null;
     
-    if(!isRunning) return; // aborted
+    if(!isRunning) return;
 
-    // 4. 数据处理
     const blob = new Blob(chunks, {type: mime});
     const ab = await blob.arrayBuffer();
     const audioB = await ctx.decodeAudioData(ab);
     const recData = audioB.getChannelData(0);
     
-    // 卷积
     const ir = convolve(recData, inv);
     
-    // 5. 谐波分析 (提取 IR 中的脉冲)
     analyzeEssHarmonics(ir, sr, fStart, fEnd, dur);
 }
 
@@ -746,13 +729,11 @@ function analyzeEssHarmonics(ir, sr, f1, f2, dur) {
     analyzePeak();
 }
 
-// ==================== 5. 图表绘制引擎 (支持缩放/网格) ====================
+// ==================== 5. 图表绘制引擎 (保持不变) ====================
 
-// 初始化图表交互
 function initChartInteraction(canvasId, viewObj, drawFn) {
     const canvas = $(canvasId);
     
-    // 滚轮缩放
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         const rect = canvas.getBoundingClientRect();
@@ -760,21 +741,16 @@ function initChartInteraction(canvasId, viewObj, drawFn) {
         const w = canvas.width;
         
         if (viewObj === chartView) {
-            // 频率轴缩放 (对数逻辑较复杂，这里简化为范围缩放)
-            // 简单逻辑：缩放 factor
             const factor = e.deltaY > 0 ? 1.1 : 0.9;
             const range = viewObj.freq.max - viewObj.freq.min;
             const newRange = range * factor;
             const mouseFrac = mouseX / w;
-            // 保持鼠标指向的频率位置相对不变
             const fMouse = viewObj.freq.min + range * mouseFrac; 
             
             viewObj.freq.min = fMouse - newRange * mouseFrac;
             viewObj.freq.max = fMouse + newRange * (1 - mouseFrac);
-            // 限制
             if(viewObj.freq.min < 1) viewObj.freq.min = 1;
         } else {
-            // 波形缩放
             const factor = e.deltaY > 0 ? 0.8 : 1.25;
             viewObj.zoom *= factor;
             if(viewObj.zoom < 1) viewObj.zoom = 1;
@@ -782,7 +758,6 @@ function initChartInteraction(canvasId, viewObj, drawFn) {
         drawFn();
     }, {passive:false});
 
-    // 拖拽平移
     canvas.addEventListener('mousedown', e => {
         viewObj.isDragging = true;
         viewObj.lastX = e.clientX;
@@ -800,13 +775,11 @@ function initChartInteraction(canvasId, viewObj, drawFn) {
             viewObj.freq.min += shift;
             viewObj.freq.max += shift;
         } else {
-            // 波形平移
             viewObj.offset -= dx / viewObj.zoom; 
         }
         drawFn();
     });
     
-    // 双击复位
     canvas.addEventListener('dblclick', () => {
         if (viewObj === chartView) resetChartView(globalData.fStart, globalData.fEnd);
         else { tapView.zoom = 1; tapView.offset = 0; }
@@ -821,10 +794,8 @@ function resetChartView(f1, f2) {
     chartView.db.max = 0;
 }
 
-// 主绘制函数
 function drawMainChart() {
     const canvas = $('plot');
-    // 处理 Retina 屏清晰度
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.parentNode.getBoundingClientRect();
     canvas.width = rect.width * dpr;
@@ -834,7 +805,6 @@ function drawMainChart() {
     const w = rect.width;
     const h = rect.height;
 
-    // 背景
     ctx.fillStyle = "#061225";
     ctx.fillRect(0, 0, w, h);
     
@@ -842,10 +812,8 @@ function drawMainChart() {
     const fMax = chartView.freq.max;
     if (fMin >= fMax) return;
 
-    // 绘制网格与坐标
-    drawGrid(ctx, w, h, fMin, fMax, -100, 10);
+    drawGrid(ctx, w, h, fMin, fMax);
 
-    // 准备数据
     if (globalData.type === 'step') {
         const data = globalData.stepData;
         if(data.length < 2) return;
@@ -855,13 +823,14 @@ function drawMainChart() {
         ctx.lineWidth = 2;
         let started = false;
         
-        // LogX 映射
         const logMin = Math.log10(fMin);
         const logMax = Math.log10(fMax);
-        const scaleX = w / (logMax - logMin);
+        const logRange = logMax - logMin;
+        const scaleX = w / logRange;
 
         data.forEach(p => {
             if(p.f < fMin || p.f > fMax) return;
+            // 使用对数刻度映射X轴
             const x = (Math.log10(p.f) - logMin) * scaleX;
             // Map dB (-100 to 0) to Y
             const y = h - ((p.db + 100) / 100) * h; 
@@ -873,19 +842,19 @@ function drawMainChart() {
     else if (globalData.type === 'ess' && globalData.essResults) {
         const colors = {1:'#3fa7ff', 2:'#ffcf6b', 3:'#ff6b6b'};
         const logMin = Math.log10(fMin);
-        const scaleX = w / (Math.log10(fMax) - logMin);
+        const logMax = Math.log10(fMax);
+        const logRange = logMax - logMin;
+        const scaleX = w / logRange;
 
-        // 获取要显示的谐波
         const visibleH = Array.from(document.querySelectorAll('.hToggle'))
                          .filter(c=>c.checked).map(c=>parseInt(c.value));
         
-        // 自动调整 Y 范围以适应数据
         let maxDb = -100;
         visibleH.forEach(k => {
             if(globalData.essResults[k]) maxDb = Math.max(maxDb, ...globalData.essResults[k].amps);
         });
         const yTop = Math.ceil(maxDb/10)*10 + 10;
-        const yBot = yTop - 90;
+        const yBot = yTop - 90; // Y轴范围固定为90dB
 
         visibleH.forEach(k => {
             if(!globalData.essResults[k]) return;
@@ -908,7 +877,7 @@ function drawMainChart() {
     }
 }
 
-function drawGrid(ctx, w, h, fMin, fMax, dbMin, dbMax) {
+function drawGrid(ctx, w, h, fMin, fMax) {
     ctx.lineWidth = 1;
     ctx.font = "10px sans-serif";
     const logMin = Math.log10(fMin);
@@ -919,9 +888,8 @@ function drawGrid(ctx, w, h, fMin, fMax, dbMin, dbMax) {
     ctx.fillStyle = "#5c6b8f";
     ctx.textAlign = "center";
     
-    // 生成 10, 20... 100, 200... 网格
     let base = Math.pow(10, Math.floor(logMin));
-    while(base < fMax) {
+    while(base < fMax * 10) {
         [1, 2, 5].forEach(mult => {
             const f = base * mult;
             if(f >= fMin && f <= fMax) {
@@ -936,9 +904,8 @@ function drawGrid(ctx, w, h, fMin, fMax, dbMin, dbMax) {
         base *= 10;
     }
 
-    // 幅度横线
+    // 幅度横线 (固定范围 -100dB 到 0dB)
     ctx.textAlign = "left";
-    const range = 100; // fixed -100 to 0 mostly
     for(let db = 0; db >= -100; db -= 20) {
         const y = h - ((db + 100) / 100) * h;
         ctx.beginPath();
@@ -948,7 +915,6 @@ function drawGrid(ctx, w, h, fMin, fMax, dbMin, dbMax) {
     }
 }
 
-// 敲击检测绘图
 function drawTapChart() {
     const canvas = $('tapWave');
     if (!tapDataRaw) return;
@@ -965,7 +931,6 @@ function drawTapChart() {
     ctx.fillStyle = "#061225";
     ctx.fillRect(0,0,w,h);
     
-    // 中线
     ctx.strokeStyle = "#1f2a44";
     ctx.beginPath(); ctx.moveTo(0, h/2); ctx.lineTo(w, h/2); ctx.stroke();
 
@@ -974,7 +939,6 @@ function drawTapChart() {
     ctx.beginPath();
     
     const len = tapDataRaw.length;
-    // 每一个像素点代表的数据量
     const step = Math.max(1, Math.floor(len / w / tapView.zoom));
     const startIdx = Math.floor(tapView.offset);
     
@@ -983,7 +947,7 @@ function drawTapChart() {
         const idx = startIdx + Math.floor(x * step);
         if (idx >= 0 && idx < len) {
             const v = tapDataRaw[idx];
-            const y = h/2 + v * (h/2) * 0.9; // 0.9 margin
+            const y = h/2 + v * (h/2) * 0.9;
             if(!hasMoved) { ctx.moveTo(x, y); hasMoved=true; }
             else ctx.lineTo(x, y);
         }
@@ -991,7 +955,7 @@ function drawTapChart() {
     ctx.stroke();
 }
 
-// ==================== 6. 数据分析与导出 ====================
+// ==================== 6. 数据分析与导出 (保持不变) ====================
 
 function analyzePeak() {
     let peakF = 0, peakA = -999;
@@ -1036,7 +1000,6 @@ function updateEssReport(res, f1, f2) {
     $('essReportText').textContent = txt;
 }
 
-// 敲击检测
 $('tapDetectBtn').addEventListener('click', async function() {
     const btn = this;
     btn.disabled = true;
@@ -1060,7 +1023,6 @@ $('tapDetectBtn').addEventListener('click', async function() {
         const audioB = await ctx.decodeAudioData(buf);
         let data = audioB.getChannelData(0);
 
-        // 高通滤波
         if ($('enableHPF').checked) {
             const offline = new OfflineAudioContext(1, data.length, audioB.sampleRate);
             const b = offline.createBuffer(1, data.length, audioB.sampleRate);
@@ -1078,14 +1040,12 @@ $('tapDetectBtn').addEventListener('click', async function() {
         }
 
         tapDataRaw = data;
-        tapView.zoom = 1; tapView.offset = 0; // reset
+        tapView.zoom = 1; tapView.offset = 0;
         drawTapChart();
         
-        // 基频估算 (自相关)
         const pitch = detectPitch(data, audioB.sampleRate);
         $('tapFreq').textContent = pitch ? pitch.toFixed(1) : "—";
         
-        // 下载
         const wav = audioBufferToWav(data, audioB.sampleRate);
         const url = URL.createObjectURL(wav);
         const dl = $('downloadTap');
@@ -1102,10 +1062,8 @@ $('tapDetectBtn').addEventListener('click', async function() {
 });
 
 function detectPitch(buf, sr) {
-    // 简单自相关，寻找最大峰
     const n = 1024;
     let maxRms=0, pos=0;
-    // 找能量最大的片段
     for(let i=0; i<buf.length-n; i+=512) {
         let s=0; for(let j=0; j<n; j++) s+=buf[i+j]*buf[i+j];
         if(s>maxRms){maxRms=s; pos=i;}
@@ -1113,7 +1071,7 @@ function detectPitch(buf, sr) {
     const chunk = buf.slice(pos, pos+n);
     
     let bestR=0, bestK=-1;
-    for(let k=20; k<n/2; k++) { // ~2kHz down to low freq
+    for(let k=20; k<n/2; k++) {
         let sum=0;
         for(let i=0; i<n-k; i++) sum += chunk[i]*chunk[i+k];
         if(sum > bestR) { bestR=sum; bestK=k; }
@@ -1121,7 +1079,6 @@ function detectPitch(buf, sr) {
     return bestK > 0 ? sr/bestK : null;
 }
 
-// 导出 CSV
 $('exportCSV').onclick = () => {
     let csv = "";
     if (globalData.type === 'step') {
@@ -1152,7 +1109,6 @@ function downloadFile(content, name) {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
-// WAV Header Helper
 function audioBufferToWav(samples, sr) {
     const buf = new ArrayBuffer(44 + samples.length * 2);
     const v = new DataView(buf);
