@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>直观频谱合成器 (Spectral Morphing)</title>
+<title>直观频谱合成器 Pro (CSV支持)</title>
 <style>
   /* === 保持原有 CSS 样式 === */
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0f1724;color:#e6eef8;margin:0;padding:16px}
-  .wrap{max-width:900px;margin:0 auto}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0f1724;color:#e6eef8;margin:0;padding:16px; min-height:100vh;}
+  .wrap{max-width:900px;margin:0 auto; position: relative; z-index: 1;}
   h1{font-size:20px;margin:6px 0 12px; display:flex; justify-content:space-between; align-items:center;}
-  .card{background:#0b1220;border:1px solid #1f2a44;border-radius:12px;padding:12px;margin-bottom:12px}
+  .card{background:#0b1220;border:1px solid #1f2a44;border-radius:12px;padding:12px;margin-bottom:12px; position:relative;}
   label{font-size:13px;color:#9fb0d6;display:block;margin-top:8px}
   input,select,button{font-size:15px;padding:8px;border-radius:8px;border:1px solid #26364f;background:#081024;color:#e6eef8;width:100%;box-sizing:border-box}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -23,29 +23,42 @@
   .plot-container { position: relative; width: 100%; height: 320px; overflow: hidden; background:#061225; border-radius:8px; border:1px solid #22314a;}
   canvas{display:block; width: 100%; height: 100%; cursor: crosshair;}
   
-  .pill{display:inline-block;padding:8px 12px;border-radius:999px;background:#07162b;color:#bfe0ff;margin-right:8px;font-size:13px}
-  .hint{font-size:12px;color:#95b7dc;margin-top:8px;line-height:1.4}
-  
   .section-title { color:#3fa7ff; font-size:14px; font-weight:bold; margin-bottom:8px; display:block; border-bottom:1px solid #1f2a44; padding-bottom:4px; }
-  
-  /* 新增：模式解释 */
   .mode-desc { font-size:12px; color:#ffcf6b; margin-top:4px; font-style: italic;}
+  .hint{font-size:12px;color:#95b7dc;margin-top:8px;line-height:1.4}
+
+  /* 拖拽覆盖层 */
+  #dropOverlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(63, 167, 255, 0.15);
+    border: 4px dashed #3fa7ff;
+    z-index: 999;
+    display: none;
+    pointer-events: none; /* 让事件穿透到底层处理 */
+    justify-content: center; align-items: center;
+    color: #3fa7ff; font-size: 24px; font-weight: bold;
+    backdrop-filter: blur(2px);
+  }
+  #dropOverlay.active { display: flex; }
 </style>
 </head>
 <body>
+
+<div id="dropOverlay">松开鼠标导入 CSV 曲线</div>
+
 <div class="wrap">
-  <h1><span>直观频谱合成器</span> <span style="font-size:12px;color:#666">Spectral Synthesis</span></h1>
+  <h1><span>直观频谱合成器 Pro</span> <span style="font-size:12px;color:#666">CSV Enabled</span></h1>
 
   <div class="card">
-    <span class="section-title">频谱绘制 (Draw Your Sound)</span>
+    <span class="section-title">频谱绘制 / CSV 导入</span>
     <div class="plot-container">
         <canvas id="canvas"></canvas>
     </div>
     <div class="hint">
-      <b>现在所见即所听！</b><br>
-      • <b>高频 (右侧)</b>：控制尖锐度、“嘶嘶”声或高音。<br>
-      • <b>低频 (左侧)</b>：控制厚度、“轰隆”声或低音。<br>
-      • <b>操作</b>：左键点击/拖拽加点，双击删点，滚轮缩放频率轴。
+      <b>操作指南：</b><br>
+      • <b>绘图</b>：左键点击/拖拽加点，双击删点。<br>
+      • <b>导入</b>：<span style="color:#3fa7ff;font-weight:bold;">将扫频 CSV 文件直接拖入此页面</span>，自动复刻频响曲线。<br>
+      • <b>缩放</b>：滚轮缩放频率轴 (0-40kHz)，右键拖拽平移。
     </div>
   </div>
 
@@ -55,11 +68,11 @@
       <div>
         <label>合成模式 (Synthesis Mode)</label>
         <select id="synthMode">
-          <option value="noise" selected>1. 频谱噪音 (Spectral Noise) - 最直观</option>
-          <option value="harmonic">2. 丰富谐波 (Rich Harmonics) - 乐器感</option>
+          <option value="noise" selected>1. 频谱噪音 (Spectral Noise)</option>
+          <option value="harmonic">2. 丰富谐波 (Rich Harmonics)</option>
         </select>
         <div id="modeDesc" class="mode-desc">
-            完全根据曲线生成“有色噪音”。画哪里，哪里就有声音。
+            根据曲线生成“有色噪音”。画哪里，哪里就有声音。
         </div>
       </div>
       <div>
@@ -69,9 +82,9 @@
     </div>
     
     <div id="harmonicControls" style="display:none; margin-top:8px;">
-        <label>基频音高 (Fundamental Pitch)</label>
+        <label>基频音高 (Hz)</label>
         <input id="fundFreq" type="range" min="50" max="800" step="1" value="110" />
-        <span id="freqVal" style="font-size:12px; float:right; color:#3fa7ff">110 Hz (A2)</span>
+        <span id="freqVal" style="font-size:12px; float:right; color:#3fa7ff">110 Hz</span>
     </div>
 
     <div class="controls">
@@ -80,14 +93,13 @@
     </div>
     
     <div class="hint" style="margin-top:12px; border-top:1px solid #1f2a44; padding-top:8px;">
-        引擎状态: <span id="statusText" style="color:#3fa7ff">就绪</span>
+        状态: <span id="statusText" style="color:#3fa7ff">就绪</span>
     </div>
   </div>
 </div>
 
 <script>
-// ==================== 1. MiniFFT (逆傅里叶变换核心) ====================
-// 我们需要它把你的曲线(频域)直接变成声音波形(时域)
+// ==================== 1. MiniFFT (修复版) ====================
 class MiniFFT {
     constructor(size) {
         this.size = size;
@@ -108,11 +120,17 @@ class MiniFFT {
             this.reverseTable[i] = rev;
         }
     }
-    // 逆变换：输入复数频谱 [re, im, re, im...]，输出实数波形
+    
+    // === 修复：补回了缺失的方法 ===
+    createComplexArray() { 
+        return new Float32Array(this.size * 2); 
+    }
+
     inverseTransform(outReal, inputComplex) {
         this.transform(inputComplex, true);
         for (let i = 0; i < this.size; i++) outReal[i] = inputComplex[2 * i];
     }
+
     transform(data, inverse) {
         const n = this.size;
         for (let i = 0; i < n; i++) {
@@ -158,9 +176,8 @@ let gainNode = null;
 let isPlaying = false;
 let updateTimeout = null;
 
-// 视图与数据
 const view = { minFreq: 0, maxFreq: 22000, freqLimit: 40000 };
-// 初始曲线：低频高，高频低 (模拟粉噪/自然声)
+// 数据点：{f:频率Hz, a:线性幅度0-1}
 let points = [
     { f: 0, a: 0.8 },
     { f: 400, a: 0.6 },
@@ -169,13 +186,12 @@ let points = [
     { f: 40000, a: 0.0 }
 ];
 
-// 交互状态
 let activePoint = null;
 let isDragging = false;
 let isPanning = false;
 let lastMouseX = 0;
 
-// ==================== 3. 绘图逻辑 (Canvas) ====================
+// ==================== 3. Canvas 绘图 ====================
 const canvas = $('canvas');
 const g = canvas.getContext('2d');
 
@@ -193,13 +209,13 @@ const ampToY = a => (1 - a)*canvas.height;
 
 function sortPoints() { points.sort((a,b) => a.f - b.f); }
 
-// 插值算法：获取任意频率在当前曲线上的幅度
 function getCurveAmplitude(freq) {
     if(points.length === 0) return 0;
     if(freq <= points[0].f) return points[0].a;
     if(freq >= points[points.length-1].f) return points[points.length-1].a;
     
-    // 线性插值
+    // 简单的线性插值
+    // 如果点非常多(CSV导入)，这里可以用二分查找优化，但现代JS引擎对几百个点也没问题
     for(let i=0; i<points.length-1; i++) {
         if(freq >= points[i].f && freq <= points[i+1].f) {
             const t = (freq - points[i].f) / (points[i+1].f - points[i].f);
@@ -215,13 +231,11 @@ function draw() {
     
     // 网格
     g.lineWidth = 1; g.strokeStyle = "#1f2a44"; g.fillStyle = "#5c6b8f"; g.font = "10px sans-serif";
-    // Y轴
     for(let i=0; i<=5; i++) {
         const y = ampToY(i/5);
         g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke();
         g.textAlign = "left"; g.fillText((i/5).toFixed(1), 5, y-2);
     }
-    // X轴
     const range = view.maxFreq - view.minFreq;
     let step = 2000;
     if(range < 5000) step = 500;
@@ -233,7 +247,7 @@ function draw() {
         g.textAlign = "center"; g.fillText(f, x, h-5);
     }
 
-    // 绘制曲线填充
+    // 曲线
     sortPoints();
     if(points.length > 0) {
         g.beginPath();
@@ -245,7 +259,6 @@ function draw() {
         g.fillStyle = "rgba(63, 167, 255, 0.2)";
         g.fill();
         
-        // 曲线描边
         g.beginPath();
         g.strokeStyle = "#3fa7ff"; g.lineWidth = 3;
         g.moveTo(freqToX(0), ampToY(points[0].a));
@@ -254,34 +267,136 @@ function draw() {
         g.stroke();
     }
 
-    // 控制点
-    for(let p of points) {
-        const x = freqToX(p.f);
-        if(x > -10 && x < w+10) {
-            g.beginPath();
-            g.arc(x, ampToY(p.a), p===activePoint?8:5, 0, Math.PI*2);
-            g.fillStyle = p===activePoint?"#fff":"#3fa7ff"; g.fill();
-            g.strokeStyle="#fff"; g.lineWidth=2; g.stroke();
+    // 控制点 (如果是CSV导入的大量点，就不绘制圆点，只显示线)
+    if(points.length < 100) {
+        for(let p of points) {
+            const x = freqToX(p.f);
+            if(x > -10 && x < w+10) {
+                g.beginPath();
+                g.arc(x, ampToY(p.a), p===activePoint?8:5, 0, Math.PI*2);
+                g.fillStyle = p===activePoint?"#fff":"#3fa7ff"; g.fill();
+                g.strokeStyle="#fff"; g.lineWidth=2; g.stroke();
+            }
         }
     }
 }
 
-// ==================== 4. 交互处理 ====================
+// ==================== 4. 交互 (含 CSV 拖拽) ====================
+
+// --- CSV 拖拽逻辑 ---
+const dropOverlay = $('dropOverlay');
+
+window.addEventListener('dragover', e => { e.preventDefault(); dropOverlay.classList.add('active'); });
+window.addEventListener('dragleave', e => { 
+    if (e.relatedTarget === null) dropOverlay.classList.remove('active'); 
+});
+window.addEventListener('drop', e => {
+    e.preventDefault();
+    dropOverlay.classList.remove('active');
+    
+    if(e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        parseCSV(e.dataTransfer.files[0]);
+    }
+});
+
+function parseCSV(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const text = e.target.result;
+        const lines = text.split(/\r?\n/);
+        
+        let newPoints = [];
+        let freqIdx = -1, ampIdx = -1;
+        
+        // 1. 寻找表头
+        if(lines.length > 0) {
+            const header = lines[0].toLowerCase().split(',');
+            header.forEach((col, idx) => {
+                if(col.includes('freq') || col.includes('hz')) freqIdx = idx;
+                if(col.includes('amp') || col.includes('db') || col.includes('h1')) ampIdx = idx;
+            });
+        }
+        
+        if(freqIdx === -1 || ampIdx === -1) {
+            // 如果没有表头，尝试默认 0和1列
+            freqIdx = 0; ampIdx = 1;
+        }
+
+        // 2. 解析数据
+        for(let i=1; i<lines.length; i++) {
+            const cols = lines[i].split(',');
+            if(cols.length < 2) continue;
+            
+            let f = parseFloat(cols[freqIdx]);
+            let val = parseFloat(cols[ampIdx]);
+            
+            if(isNaN(f) || isNaN(val)) continue;
+            if(f < 0 || f > 40000) continue;
+
+            // 3. 处理幅度单位
+            // 假设 CSV 里的通常是 dB (如 -100 到 0) 或者是 线性 (0-1)
+            // 简单的启发式判断：如果大部分值 < 0，认为是 dB
+            // 但为了保险，我们把 dB 转线性
+            // 通常 dB = 20 * log10(Linear)  => Linear = 10 ^ (dB / 20)
+            let lin = val;
+            
+            // 如果值明显是 dB (例如 -20, -60)，转换它
+            // 如果是 0.5, 0.8，则保持
+            // 简单逻辑：如果值小于 -1 或者 大于 1 (不太可能)，当做dB处理
+            // 或者如果用户是用上一个工具导出的，它是 dB。
+            if(val < 0) {
+                lin = Math.pow(10, val / 20);
+            }
+            // 钳位
+            lin = Math.max(0, Math.min(1, lin));
+
+            newPoints.push({f: f, a: lin});
+        }
+
+        if(newPoints.length > 0) {
+            // 4. 优化：如果点太多 (>200)，为了性能进行降采样
+            // 保留极值特征会比较复杂，这里采用简单的步进采样
+            if(newPoints.length > 200) {
+                const optimized = [];
+                const step = Math.ceil(newPoints.length / 200);
+                for(let i=0; i<newPoints.length; i+=step) {
+                    optimized.push(newPoints[i]);
+                }
+                // 确保收尾都在
+                if(optimized[optimized.length-1] !== newPoints[newPoints.length-1]) {
+                    optimized.push(newPoints[newPoints.length-1]);
+                }
+                newPoints = optimized;
+            }
+
+            points = newPoints;
+            sortPoints();
+            $('statusText').textContent = `已导入 CSV (${points.length} 点)`;
+            draw();
+            updateSoundBuffer();
+        } else {
+            alert("无法解析 CSV 数据，请检查格式。");
+        }
+    };
+    reader.readAsText(file);
+}
+
+// --- 常规交互 ---
 canvas.addEventListener('mousedown', e => {
     const r = canvas.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
     
-    if(e.button === 2) { // 右键平移
-        isPanning = true; lastMouseX = e.clientX; return;
-    }
+    if(e.button === 2) { isPanning = true; lastMouseX = e.clientX; return; }
 
-    // 命中测试
     let hit = null, minD = 20;
-    points.forEach(p => {
-        const px = freqToX(p.f), py = ampToY(p.a);
-        const d = Math.sqrt((x-px)**2 + (y-py)**2);
-        if(d < minD) { minD = d; hit = p; }
-    });
+    // 如果点太多，增加点击难度或只允许新增，这里仅在前100个点时允许拖拽
+    if(points.length < 100) {
+        points.forEach(p => {
+            const px = freqToX(p.f), py = ampToY(p.a);
+            const d = Math.sqrt((x-px)**2 + (y-py)**2);
+            if(d < minD) { minD = d; hit = p; }
+        });
+    }
 
     if(hit) {
         activePoint = hit; isDragging = true;
@@ -289,7 +404,7 @@ canvas.addEventListener('mousedown', e => {
         const newP = { f: Math.max(0, xToFreq(x)), a: Math.max(0, Math.min(1, yToAmp(y))) };
         points.push(newP); activePoint = newP; isDragging = true;
         sortPoints();
-        updateSoundBuffer(); // 添加点立即更新
+        updateSoundBuffer();
     }
     draw();
 });
@@ -311,22 +426,17 @@ window.addEventListener('mousemove', e => {
     activePoint.f = parseFloat(f.toFixed(1)); activePoint.a = a;
     draw();
     
-    // 拖动时节流更新声音
     if(isPlaying && !updateTimeout) {
-        updateTimeout = setTimeout(() => {
-            updateSoundBuffer();
-            updateTimeout = null;
-        }, 50); // 50ms 更新一次
+        updateTimeout = setTimeout(() => { updateSoundBuffer(); updateTimeout = null; }, 50);
     }
 });
 
 window.addEventListener('mouseup', () => {
     isDragging = false; isPanning = false; activePoint = null;
-    if(isPlaying) updateSoundBuffer(); // 最终更新
+    if(isPlaying) updateSoundBuffer();
 });
 
 canvas.addEventListener('dblclick', e => {
-    // 简单删除逻辑
     const r = canvas.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
     let hitIdx = -1, minD = 20;
@@ -353,8 +463,8 @@ canvas.addEventListener('wheel', e => {
 }, {passive:false});
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-// ==================== 5. 核心音频引擎 (Spectral Synthesis) ====================
 
+// ==================== 5. 音频合成引擎 ====================
 function initAudio() {
     if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if(!gainNode) {
@@ -364,92 +474,52 @@ function initAudio() {
     }
 }
 
-// 这就是魔法所在：直接根据你的曲线计算波形
 function generateBuffer() {
     if(!audioCtx) return null;
-    
-    const size = 16384; // 较大的FFT尺寸以获得更好的低频分辨率
+    const size = 16384; 
     const fft = new MiniFFT(size);
     const complex = fft.createComplexArray();
     const mode = $('synthMode').value;
     const sr = audioCtx.sampleRate;
-    
-    // 1. 填充频域数据
     const binSize = sr / size;
     const nyquistBin = size / 2;
-    
-    // 谐波模式参数
     const fundFreq = parseFloat($('fundFreq').value);
     
     if (mode === 'noise') {
-        // === 模式1: 频谱噪音 ===
-        // 每个频率点都根据曲线设置幅度，相位随机
         for(let i = 1; i < nyquistBin; i++) {
             const freq = i * binSize;
             const amp = getCurveAmplitude(freq);
-            
-            // 随机相位产生噪音
             const phase = Math.random() * 2 * Math.PI;
-            
-            // 实部 = amp * cos(phase), 虚部 = amp * sin(phase)
-            // 乘以一个缩放因子防止爆音
             const scale = amp * 0.5; 
             complex[2*i] = scale * Math.cos(phase);
             complex[2*i+1] = scale * Math.sin(phase);
         }
     } else {
-        // === 模式2: 丰富谐波 (类似加性合成) ===
-        // 只有基频的整数倍位置有能量，幅度由曲线决定
         for(let n = 1; ; n++) {
             const freq = n * fundFreq;
-            if(freq >= sr/2) break; // 超过奈奎斯特频率停止
-            
+            if(freq >= sr/2) break;
             const bin = Math.round(freq / binSize);
             if(bin >= nyquistBin) break;
-            
             const amp = getCurveAmplitude(freq);
-            
-            // 随机相位可以让声音更厚实，固定相位更像电子音
-            // 这里用随机相位避免峰值叠加导致的爆音
             const phase = Math.random() * 2 * Math.PI;
-            
-            // 谐波需要更多的增益补偿，因为只有少数bin有能量
             const scale = amp * 100; 
-            
             complex[2*bin] = scale * Math.cos(phase);
             complex[2*bin+1] = scale * Math.sin(phase);
         }
     }
-
-    // 2. 逆变换生成时域波形
+    
     const timeDomain = new Float32Array(size);
     fft.inverseTransform(timeDomain, complex);
     
-    // 3. 创建 Buffer 并平滑边缘防止循环咔哒声
     const buffer = audioCtx.createBuffer(1, size, sr);
     const data = buffer.getChannelData(0);
-    
-    // 简单的淡入淡出处理 (Windowing)
-    for(let i=0; i<size; i++) {
-        // 使用 Hann Window 的变种来平滑首尾
-        // 或者因为相位是随机的，首尾可能不匹配。
-        // 对于噪音循环，最好的办法是生成长一点然后由AudioNode循环，
-        // 但这里为了响应速度，我们做简单的线性淡入淡出。
-        data[i] = timeDomain[i];
-    }
-    
+    for(let i=0; i<size; i++) data[i] = timeDomain[i];
     return buffer;
 }
 
-// 热更新声音
 function updateSoundBuffer() {
     if(!isPlaying || !audioCtx) return;
-    
     const newBuf = generateBuffer();
-    
-    // 无缝切换 Buffer (Cross-fading technique would be better but complex)
-    // 这里我们使用一种快速替换策略：
-    // 创建新源，启动新源，停止旧源。
     
     const newSource = audioCtx.createBufferSource();
     newSource.buffer = newBuf;
@@ -460,59 +530,42 @@ function updateSoundBuffer() {
     const oldSource = bufferSource;
     bufferSource = newSource;
     
-    if(oldSource) {
-        // 微小的重叠防止爆音
-        oldSource.stop(audioCtx.currentTime + 0.05);
-        // 让旧声音淡出一点点会更好，但这里简化处理
-    }
+    if(oldSource) oldSource.stop(audioCtx.currentTime + 0.05);
 }
 
-// 播放控制
 $('btnStart').onclick = async () => {
     initAudio();
     await audioCtx.resume();
-    
     bufferSource = audioCtx.createBufferSource();
     bufferSource.buffer = generateBuffer();
     bufferSource.loop = true;
     bufferSource.connect(gainNode);
     bufferSource.start();
-    
     isPlaying = true;
-    $('btnStart').disabled = true;
-    $('btnStop').disabled = false;
+    $('btnStart').disabled = true; $('btnStop').disabled = false;
     $('statusText').textContent = "正在合成并播放...";
 };
 
 $('btnStop').onclick = () => {
-    if(bufferSource) {
-        try{ bufferSource.stop(); }catch(e){}
-        bufferSource.disconnect();
-    }
+    if(bufferSource) { try{ bufferSource.stop(); }catch(e){} bufferSource.disconnect(); }
     isPlaying = false;
-    $('btnStart').disabled = false;
-    $('btnStop').disabled = true;
+    $('btnStart').disabled = false; $('btnStop').disabled = true;
     $('statusText').textContent = "已停止";
 };
 
-// UI 响应
 $('masterGain').oninput = function() { if(gainNode) gainNode.gain.value = this.value; };
-
 $('synthMode').onchange = function() {
-    const val = this.value;
-    $('harmonicControls').style.display = val === 'harmonic' ? 'block' : 'none';
-    $('modeDesc').textContent = val === 'noise' 
-        ? "完全根据曲线生成“有色噪音”。画哪里，哪里就有声音 (高频=嘶嘶, 低频=轰隆)。" 
-        : "基于基频产生一系列谐波，曲线决定每个谐波的音量 (类似风琴或人声元音)。";
+    $('harmonicControls').style.display = this.value === 'harmonic' ? 'block' : 'none';
+    $('modeDesc').textContent = this.value === 'noise' 
+        ? "基于曲线生成有色噪音 (高频=嘶嘶, 低频=轰隆)。" 
+        : "基于基频产生谐波，曲线决定谐波音量。";
     updateSoundBuffer();
 };
-
 $('fundFreq').oninput = function() {
     $('freqVal').textContent = this.value + " Hz";
     if($('synthMode').value === 'harmonic') updateSoundBuffer();
 };
 
-// 初始化
 resize();
 </script>
 </body>
